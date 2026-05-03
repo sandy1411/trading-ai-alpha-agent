@@ -1,0 +1,9 @@
+$ErrorActionPreference = "Stop"
+
+$dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
+$docker = if ($dockerCommand) { $dockerCommand.Source } else { "C:\Program Files\Docker\Docker\resources\bin\docker.exe" }
+if (-not (Test-Path -LiteralPath $docker)) {
+  throw "Docker is not installed or not on PATH."
+}
+
+& $docker compose exec postgres psql -U dalalwall -d dalalwall_ai_alpha
