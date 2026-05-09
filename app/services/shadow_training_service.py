@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from math import floor
 from typing import Any
 
@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.enums import AssetClass, Market, RiskDecisionType
+from app.core.enums import AssetClass, Market, RiskDecisionType, TradeAction
 from app.core.errors import TradingAlphaError
 from app.data_providers.alpaca_data import AlpacaDataProvider
 from app.data_providers.fx_provider import FXProvider
@@ -299,6 +299,21 @@ class ShadowTrainingService:
             )
         )
         if observation is None:
+            action_value = (
+                assessment.action.value if hasattr(assessment.action, "value") else str(assessment.action)
+            )
+            if action_value != TradeAction.BUY.value:
+                self._record_risk_event(
+                    session,
+                    market,
+                    "shadow_entry_quality_blocked",
+                    (
+                        f"{symbol}: strategy returned {action_value}; "
+                        "no fresh shadow buy/watch observation opened."
+                    ),
+                    "INFO",
+                )
+                return False
             cooldown = self._active_reentry_cooldown(session, market, symbol, now)
             if cooldown is not None:
                 self._record_risk_event(
@@ -689,7 +704,66 @@ class ShadowTrainingService:
         market_pause = self._market_loss_pause(session, market, now)
         if market_pause is not None:
             return market_pause
+        previous_session_pause = self._previous_session_symbol_loss_pause(
+            session, market, symbol, now
+        )
+        if previous_session_pause is not None:
+            return previous_session_pause
         return self._symbol_loss_pause(session, market, symbol, now)
+
+    def _previous_session_symbol_loss_pause(
+        self,
+        session: Session,
+        market: Market,
+        symbol: str,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        if not self.settings.intraday_previous_session_loss_pause_enabled:
+            return None
+        start_today = datetime.combine(now.date(), time.min, tzinfo=UTC)
+        cutoff = start_today - timedelta(
+            days=self.settings.intraday_previous_session_loss_pause_lookback_days
+        )
+        sample = session.scalar(
+            select(ShadowTrainingSample)
+            .where(
+                ShadowTrainingSample.strategy_name == self.strategy_name,
+                ShadowTrainingSample.market == market,
+                ShadowTrainingSample.symbol == symbol,
+                ShadowTrainingSample.sample_at >= cutoff,
+                ShadowTrainingSample.sample_at < start_today,
+                ShadowTrainingSample.hypothetical_quantity > 0,
+                ShadowTrainingSample.hypothetical_notional_inr > 0,
+            )
+            .order_by(ShadowTrainingSample.sample_at.desc())
+            .limit(1)
+        )
+        if sample is None:
+            return None
+
+        pnl = float(sample.hypothetical_pnl_inr or 0)
+        notional = float(sample.hypothetical_notional_inr or 0)
+        pnl_pct = pnl / notional if notional > 0 else 0.0
+        threshold_hit = (
+            pnl <= -self.settings.intraday_previous_session_loss_pause_inr
+            or pnl_pct <= -self.settings.intraday_previous_session_loss_pause_pct
+        )
+        if not threshold_hit:
+            return None
+
+        return {
+            "scope": "PREVIOUS_SESSION_SYMBOL",
+            "reason": (
+                f"Latest previous-session mark for {market.value} {symbol} ended at "
+                f"{pnl:.2f} INR ({pnl_pct:.2%}). Pause fresh entry today until a "
+                "new high-quality setup appears; do not blindly retry yesterday's loser."
+            ),
+            "sample_at": sample.sample_at.isoformat(),
+            "total_pnl_inr": pnl,
+            "pnl_pct": pnl_pct,
+            "shadow_only": True,
+            "no_order_placement": True,
+        }
 
     def _symbol_loss_pause(
         self,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
@@ -184,6 +186,82 @@ def test_shadow_training_records_hypothesis_without_order(monkeypatch) -> None:
     assert sample is not None
     assert sample.observation_id == observation.id
     assert sample.sample_kind == "INTRADAY_MARK"
+    assert order_count == 0
+
+
+def test_shadow_training_does_not_open_new_observation_for_no_trade_signal(monkeypatch) -> None:
+    class ProviderStub:
+        def __init__(self, settings) -> None:
+            self.settings = settings
+
+        def latest(self, symbol: str, market: Market) -> dict:
+            return {
+                "data": {
+                    f"NSE:{symbol}": {
+                        "last_price": 100.0,
+                        "average_price": 101.0,
+                        "volume": 100000,
+                        "ohlc": {
+                            "open": 102.0,
+                            "high": 103.0,
+                            "low": 99.0,
+                            "close": 101.0,
+                        },
+                    }
+                }
+            }
+
+    class NoTradeStrategy:
+        def assess(self, quote: dict, last_price: float | None) -> _Assessment:
+            assessment = _Assessment(stop_loss=98, take_profit=110)
+            assessment.action = TradeAction.NO_TRADE
+            assessment.confidence = 0.25
+            assessment.risk_flags = [
+                "observation_only_no_order_intent",
+                "quality_filter_did_not_clear_buy_threshold",
+            ]
+            assessment.reasons = ["test_no_trade_quality_block"]
+            return assessment
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+    settings = Settings(
+        _env_file=None,
+        shadow_training_enabled=True,
+        shadow_hypothesis_notional_inr=10000,
+        shadow_india_symbols="RELIANCE",
+        shadow_us_symbols="",
+    )
+    service = ShadowTrainingService(settings)
+    service.strategy = NoTradeStrategy()
+    monkeypatch.setattr(
+        service.calendar,
+        "status",
+        lambda market: MarketCalendarStatus(
+            market=market,
+            state=MarketCalendarState.OPEN,
+            reason="regular_session_open",
+        ),
+    )
+    monkeypatch.setattr(shadow_module, "ZerodhaDataProvider", ProviderStub)
+
+    with session_factory() as session:
+        result = service.run_cycle(session)
+        observation_count = session.scalar(select(func.count()).select_from(ShadowObservation))
+        sample_count = session.scalar(select(func.count()).select_from(ShadowTrainingSample))
+        quality_event = session.scalar(
+            select(RiskEvent).where(RiskEvent.event_type == "shadow_entry_quality_blocked")
+        )
+        order_count = session.scalar(select(func.count()).select_from(Order))
+
+    assert result["orders_placed"] == 0
+    assert result["india"]["observed"] == 1
+    assert result["shadow_observations_updated"] == 0
+    assert observation_count == 0
+    assert sample_count == 0
+    assert quality_event is not None
+    assert "NO_TRADE" in quality_event.message
     assert order_count == 0
 
 
@@ -562,6 +640,7 @@ def test_loss_discipline_pauses_fresh_symbol_entry_after_repeated_losing_samples
         intraday_market_loss_pause_min_samples=20,
     )
     service = ShadowTrainingService(settings)
+    service.strategy = _FixedExitStrategy([_Assessment()])
     monkeypatch.setattr(
         service.calendar,
         "status",
@@ -606,4 +685,88 @@ def test_loss_discipline_pauses_fresh_symbol_entry_after_repeated_losing_samples
     assert observation_count == 0
     assert pause_event is not None
     assert "new shadow entry paused" in pause_event.message
+    assert order_count == 0
+
+
+def test_previous_session_loss_pauses_next_day_fresh_entry(monkeypatch) -> None:
+    class ProviderStub:
+        def __init__(self, settings) -> None:
+            self.settings = settings
+
+        def latest(self, symbol: str, market: Market) -> dict:
+            return {
+                "data": {
+                    f"NSE:{symbol}": {
+                        "last_price": 100.0,
+                        "average_price": 100.0,
+                        "volume": 100000,
+                        "ohlc": {
+                            "open": 99.0,
+                            "high": 101.0,
+                            "low": 98.0,
+                            "close": 98.0,
+                        },
+                    }
+                }
+            }
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+    settings = Settings(
+        _env_file=None,
+        shadow_training_enabled=True,
+        shadow_hypothesis_notional_inr=10000,
+        shadow_india_symbols="TCS",
+        shadow_us_symbols="",
+        intraday_previous_session_loss_pause_enabled=True,
+        intraday_previous_session_loss_pause_lookback_days=3,
+        intraday_previous_session_loss_pause_inr=750,
+        intraday_previous_session_loss_pause_pct=0.0075,
+        intraday_market_loss_pause_min_samples=20,
+    )
+    service = ShadowTrainingService(settings)
+    monkeypatch.setattr(
+        service.calendar,
+        "status",
+        lambda market: MarketCalendarStatus(
+            market=market,
+            state=MarketCalendarState.OPEN,
+            reason="regular_session_open",
+        ),
+    )
+    monkeypatch.setattr(shadow_module, "ZerodhaDataProvider", ProviderStub)
+
+    with session_factory() as session:
+        session.add(
+            ShadowTrainingSample(
+                strategy_name=service.strategy_name,
+                market=Market.INDIA,
+                symbol="TCS",
+                sample_at=utc_now() - timedelta(days=1),
+                entry_price=100,
+                current_price=88,
+                hypothetical_quantity=100,
+                hypothetical_notional_inr=10000,
+                hypothetical_pnl_inr=-1200,
+                hypothetical_pnl_pct=-0.12,
+                sample_kind="INTRADAY_MARK",
+                metadata_json={"shadow_only": True},
+            )
+        )
+        session.commit()
+
+        result = service.run_cycle(session)
+        observation_count = session.scalar(select(func.count()).select_from(ShadowObservation))
+        pause_event = session.scalar(
+            select(RiskEvent).where(RiskEvent.event_type == "shadow_loss_discipline_pause")
+        )
+        order_count = session.scalar(select(func.count()).select_from(Order))
+
+    assert result["orders_placed"] == 0
+    assert result["india"]["observed"] == 1
+    assert result["shadow_observations_updated"] == 0
+    assert observation_count == 0
+    assert pause_event is not None
+    assert "previous-session" in pause_event.message
     assert order_count == 0

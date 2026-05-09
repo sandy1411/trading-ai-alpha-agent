@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     intraday_market_loss_pause_min_samples: int = Field(default=20, ge=1)
     intraday_market_loss_pause_win_rate: float = Field(default=0.35, ge=0, le=1)
     intraday_market_loss_pause_inr: float = Field(default=5_000, ge=0)
+    intraday_previous_session_loss_pause_enabled: bool = True
+    intraday_previous_session_loss_pause_lookback_days: int = Field(default=3, ge=1)
+    intraday_previous_session_loss_pause_inr: float = Field(default=750, ge=0)
+    intraday_previous_session_loss_pause_pct: float = Field(default=0.0075, ge=0, le=1)
     shadow_india_symbols: str = (
         "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,LT,AXISBANK,"
         "KOTAKBANK,BAJFINANCE,BHARTIARTL,ITC,HINDUNILVR,SUNPHARMA,"
