@@ -174,6 +174,32 @@ def test_missing_market_data_provider_blocks_live_trading(
     assert "market_data_provider_missing" in decision.rejection_reasons
 
 
+def test_market_mismatch_health_inputs_block_live_trading(
+    candidate,
+    portfolio,
+    broker_health,
+    provider_health,
+    live_state,
+    fresh_fx,
+    settings,
+) -> None:
+    candidate.market = Market.US
+
+    decision = RiskEngine(settings).evaluate(
+        candidate,
+        portfolio,
+        broker_health,
+        provider_health,
+        MarketCalendarStatus(market=Market.INDIA, state=MarketCalendarState.OPEN),
+        fx_status=fresh_fx,
+        system_state=live_state,
+    )
+
+    assert "broker_market_mismatch" in decision.rejection_reasons
+    assert "provider_market_mismatch:ZERODHA_KITE" in decision.rejection_reasons
+    assert "market_calendar_market_mismatch" in decision.rejection_reasons
+
+
 def test_india_live_order_blocked_if_compliance_not_approved(
     candidate,
     portfolio,

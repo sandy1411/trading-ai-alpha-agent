@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.enums import AssetClass, Market, RiskDecisionType, TradeAction
 from app.core.errors import TradingAlphaError
+from app.core.time_utils import as_timezone, ensure_utc
 from app.data_providers.alpaca_data import AlpacaDataProvider
 from app.data_providers.fx_provider import FXProvider
 from app.data_providers.zerodha_data import ZerodhaDataProvider
@@ -720,7 +721,7 @@ class ShadowTrainingService:
     ) -> dict[str, Any] | None:
         if not self.settings.intraday_previous_session_loss_pause_enabled:
             return None
-        start_today = datetime.combine(now.date(), time.min, tzinfo=UTC)
+        start_today = self._market_day_start_utc(market, now)
         cutoff = start_today - timedelta(
             days=self.settings.intraday_previous_session_loss_pause_lookback_days
         )
@@ -764,6 +765,14 @@ class ShadowTrainingService:
             "shadow_only": True,
             "no_order_placement": True,
         }
+
+    def _market_day_start_utc(self, market: Market, now: datetime) -> datetime:
+        timezone_name = (
+            self.settings.india_timezone if market == Market.INDIA else self.settings.us_timezone
+        )
+        local_now = as_timezone(ensure_utc(now), timezone_name)
+        local_start = datetime.combine(local_now.date(), time.min, tzinfo=local_now.tzinfo)
+        return ensure_utc(local_start)
 
     def _symbol_loss_pause(
         self,

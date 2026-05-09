@@ -78,10 +78,14 @@ class ExecutionAgent:
             raise RiskRejectedError("live_trading_enabled_false")
         if state.kill_switch:
             raise RiskRejectedError("kill_switch_enabled")
+        if broker_health.market != intent.market:
+            raise RiskRejectedError("broker_market_mismatch")
         if not broker_health.is_healthy_for_live:
             raise RiskRejectedError("broker_health_not_live_ready")
         if intent.market == Market.INDIA:
             if compliance_status is None or not compliance_status.approved:
                 raise RiskRejectedError("india_compliance_not_approved")
+            if compliance_status.market != intent.market:
+                raise RiskRejectedError("india_compliance_market_mismatch")
         if not intent.idempotency_key:
             raise RiskRejectedError("idempotency_key_required")

@@ -5,11 +5,16 @@ from app.schemas.fx import FXRateStatus
 from app.schemas.provider import ProviderHealth
 
 
-def provider_freshness_reasons(providers: list[ProviderHealth]) -> list[str]:
+def provider_freshness_reasons(
+    providers: list[ProviderHealth],
+    expected_market: Market | None = None,
+) -> list[str]:
     if not providers:
         return ["market_data_provider_missing"]
     reasons: list[str] = []
     for provider in providers:
+        if expected_market is not None and provider.market != expected_market:
+            reasons.append(f"provider_market_mismatch:{provider.provider_name}")
         if not provider.is_healthy_for_live:
             reasons.append(f"provider_unhealthy:{provider.provider_name}")
     return reasons

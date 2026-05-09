@@ -98,6 +98,8 @@ class RiskEngine:
         if candidate.market == Market.INDIA and state.trading_mode.is_live_capable:
             if compliance_status is None:
                 rejection_reasons.append("india_compliance_status_missing")
+            elif compliance_status.market != candidate.market:
+                rejection_reasons.append("india_compliance_market_mismatch")
             elif not compliance_status.approved:
                 rejection_reasons.append("india_compliance_not_approved")
                 rejection_reasons.extend(compliance_status.rejection_reasons)
@@ -105,6 +107,8 @@ class RiskEngine:
         if broker_health is None:
             rejection_reasons.append("broker_health_missing")
         else:
+            if broker_health.market != candidate.market:
+                rejection_reasons.append("broker_market_mismatch")
             if broker_health.auth_status == AuthStatus.MISSING_CREDENTIALS:
                 rejection_reasons.append("broker_credentials_missing")
             elif broker_health.auth_status != AuthStatus.VALID:
@@ -116,10 +120,12 @@ class RiskEngine:
             if not broker_health.positions_reconciled:
                 rejection_reasons.append("portfolio_reconciliation_required")
 
-        rejection_reasons.extend(provider_freshness_reasons(providers))
+        rejection_reasons.extend(provider_freshness_reasons(providers, candidate.market))
 
         if market_calendar is None:
             rejection_reasons.append("market_calendar_status_missing")
+        elif market_calendar.market != candidate.market:
+            rejection_reasons.append("market_calendar_market_mismatch")
         elif not market_calendar.is_open:
             rejection_reasons.append("market_closed")
 

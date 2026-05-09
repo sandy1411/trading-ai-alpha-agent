@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
@@ -770,3 +770,67 @@ def test_previous_session_loss_pauses_next_day_fresh_entry(monkeypatch) -> None:
     assert pause_event is not None
     assert "previous-session" in pause_event.message
     assert order_count == 0
+
+
+def test_previous_session_loss_pause_uses_market_local_day_boundary() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+    settings = Settings(
+        _env_file=None,
+        intraday_previous_session_loss_pause_enabled=True,
+        intraday_previous_session_loss_pause_lookback_days=3,
+        intraday_previous_session_loss_pause_inr=750,
+        intraday_previous_session_loss_pause_pct=0.0075,
+    )
+    service = ShadowTrainingService(settings)
+    now = datetime(2026, 5, 9, 2, 0, tzinfo=UTC)
+
+    with session_factory() as session:
+        session.add(
+            ShadowTrainingSample(
+                strategy_name=service.strategy_name,
+                market=Market.INDIA,
+                symbol="TCS",
+                sample_at=datetime(2026, 5, 8, 19, 0, tzinfo=UTC),
+                entry_price=100,
+                current_price=88,
+                hypothetical_quantity=100,
+                hypothetical_notional_inr=10000,
+                hypothetical_pnl_inr=-1200,
+                hypothetical_pnl_pct=-0.12,
+                sample_kind="INTRADAY_MARK",
+                metadata_json={"shadow_only": True},
+            )
+        )
+        session.commit()
+
+        current_day_pause = service._previous_session_symbol_loss_pause(
+            session, Market.INDIA, "TCS", now
+        )
+
+        session.add(
+            ShadowTrainingSample(
+                strategy_name=service.strategy_name,
+                market=Market.INDIA,
+                symbol="TCS",
+                sample_at=datetime(2026, 5, 8, 17, 0, tzinfo=UTC),
+                entry_price=100,
+                current_price=88,
+                hypothetical_quantity=100,
+                hypothetical_notional_inr=10000,
+                hypothetical_pnl_inr=-1200,
+                hypothetical_pnl_pct=-0.12,
+                sample_kind="INTRADAY_MARK",
+                metadata_json={"shadow_only": True},
+            )
+        )
+        session.commit()
+
+        previous_day_pause = service._previous_session_symbol_loss_pause(
+            session, Market.INDIA, "TCS", now
+        )
+
+    assert current_day_pause is None
+    assert previous_day_pause is not None
+    assert previous_day_pause["scope"] == "PREVIOUS_SESSION_SYMBOL"
