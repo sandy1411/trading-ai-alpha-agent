@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     trading_mode: TradingMode = TradingMode.SHADOW_LIVE_REAL_DATA
     live_trading_enabled: bool = False
     kill_switch: bool = True
+    api_control_auth_enabled: bool = False
+    api_control_token: str = ""
 
     database_url: str = "postgresql+psycopg://dalalwall:dalalwall@localhost:5432/dalalwall_ai_alpha"
     redis_url: str = "redis://localhost:6379/0"
@@ -79,6 +81,22 @@ class Settings(BaseSettings):
 
     india_timezone: str = "Asia/Kolkata"
     us_timezone: str = "America/New_York"
+    market_calendar_fail_closed_after_verified_year: bool = True
+    market_calendar_verified_through_year: int = Field(default=2026, ge=2026)
+    india_market_holiday_overrides: str = ""
+    us_market_holiday_overrides: str = ""
+    india_market_special_open_dates: str = ""
+    us_market_special_open_dates: str = ""
+    india_market_early_close_overrides: str = ""
+    us_market_early_close_overrides: str = ""
+
+    live_market_quality_checks_required: bool = True
+    micro_live_market_quality_checks_required: bool = False
+    min_live_intraday_volume: int = Field(default=50_000, ge=0)
+    min_live_average_daily_volume: int = Field(default=100_000, ge=0)
+    min_live_average_daily_notional_inr: float = Field(default=25_000_000, ge=0)
+    max_live_bid_ask_spread_pct: float = Field(default=0.005, ge=0, le=0.20)
+    max_live_estimated_slippage_pct: float = Field(default=0.0025, ge=0, le=0.20)
 
     india_algo_compliance_required: bool = True
     india_algo_registration_status: ComplianceApprovalStatus = ComplianceApprovalStatus.NOT_APPROVED

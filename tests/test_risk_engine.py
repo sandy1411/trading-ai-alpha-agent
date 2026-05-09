@@ -12,6 +12,7 @@ from app.core.enums import (
     ProviderStatus,
     ProviderType,
     TradeAction,
+    TradingMode,
 )
 from app.core.time_utils import utc_now
 from app.risk.risk_engine import RiskEngine
@@ -291,3 +292,97 @@ def test_no_trade_is_valid_decision(candidate, portfolio, settings) -> None:
     decision = RiskEngine(settings).evaluate(candidate, portfolio, None, None, None)
 
     assert decision.decision == "NO_TRADE"
+
+
+def test_live_autonomous_missing_quote_metrics_fails_closed(
+    candidate,
+    portfolio,
+    broker_health,
+    provider_health,
+    open_india_calendar,
+    approved_compliance,
+    live_state,
+    settings,
+) -> None:
+    live_state.trading_mode = TradingMode.LIVE_AUTONOMOUS
+
+    decision = RiskEngine(settings).evaluate(
+        candidate,
+        portfolio,
+        broker_health,
+        provider_health,
+        open_india_calendar,
+        compliance_status=approved_compliance,
+        system_state=live_state,
+    )
+
+    assert "liquidity_metrics_missing" in decision.rejection_reasons
+    assert "slippage_metrics_missing" in decision.rejection_reasons
+
+
+def test_bad_liquidity_and_wide_spread_reject_trade(
+    candidate,
+    portfolio,
+    broker_health,
+    provider_health,
+    open_india_calendar,
+    approved_compliance,
+    live_state,
+    settings,
+) -> None:
+    quote_metrics = {
+        "bid": 99.0,
+        "ask": 101.0,
+        "volume": 10_000,
+        "average_daily_volume": 50_000,
+        "average_daily_notional_inr": 5_000_000,
+    }
+
+    decision = RiskEngine(settings).evaluate(
+        candidate,
+        portfolio,
+        broker_health,
+        provider_health,
+        open_india_calendar,
+        compliance_status=approved_compliance,
+        system_state=live_state,
+        quote_metrics=quote_metrics,
+    )
+
+    assert "intraday_volume_too_low" in decision.rejection_reasons
+    assert "bid_ask_spread_too_wide" in decision.rejection_reasons
+
+
+def test_good_live_autonomous_quote_metrics_allow_risk_sizing(
+    candidate,
+    portfolio,
+    broker_health,
+    provider_health,
+    open_india_calendar,
+    approved_compliance,
+    live_state,
+    settings,
+) -> None:
+    live_state.trading_mode = TradingMode.LIVE_AUTONOMOUS
+    quote_metrics = {
+        "bid": 99.95,
+        "ask": 100.0,
+        "volume": 200_000,
+        "average_daily_volume": 1_000_000,
+        "average_daily_notional_inr": 100_000_000,
+        "estimated_slippage_pct": 0.0005,
+    }
+
+    decision = RiskEngine(settings).evaluate(
+        candidate,
+        portfolio,
+        broker_health,
+        provider_health,
+        open_india_calendar,
+        compliance_status=approved_compliance,
+        system_state=live_state,
+        quote_metrics=quote_metrics,
+    )
+
+    assert decision.rejection_reasons == []
+    assert decision.approved_quantity == 500

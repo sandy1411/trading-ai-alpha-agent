@@ -4,9 +4,9 @@ from typing import Any
 
 import httpx
 
-from app.brokers.base import BaseBroker, BrokerAccount, BrokerOrderResult
+from app.brokers.base import BaseBroker, BrokerAccount, BrokerExecutionContext, BrokerOrderResult
 from app.core.config import Settings, get_settings
-from app.core.enums import BrokerName, OrderSide, OrderStatus, OrderType
+from app.core.enums import BrokerName, Market, OrderSide, OrderStatus, OrderType
 from app.core.errors import FailClosedError, MissingCredentialsError
 from app.schemas.order import OrderIntent
 
@@ -80,9 +80,17 @@ class AlpacaBroker(BaseBroker):
             raise FailClosedError("alpaca_order_unavailable")
         return dict(response.json())
 
-    def place_order(self, order_intent: OrderIntent) -> BrokerOrderResult:
+    def place_order(
+        self,
+        order_intent: OrderIntent,
+        *,
+        execution_context: BrokerExecutionContext | None = None,
+    ) -> BrokerOrderResult:
+        self._validate_execution_context(order_intent, execution_context)
         if order_intent.broker != BrokerName.ALPACA:
             raise FailClosedError("order_intent_broker_mismatch")
+        if order_intent.market != Market.US:
+            raise FailClosedError("alpaca_market_not_supported")
         if order_intent.order_type not in {OrderType.MARKET, OrderType.LIMIT}:
             raise FailClosedError("alpaca_order_type_not_supported")
 

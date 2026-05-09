@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.brokers.base import BaseBroker, BrokerAccount, BrokerOrderResult
+from app.brokers.base import BaseBroker, BrokerAccount, BrokerExecutionContext, BrokerOrderResult
 from app.core.enums import OrderStatus
 from app.db.base import Base
+from app.db.models.order import Order
 from app.execution.idempotency import InMemoryOrderIdempotencyStore, OrderIdempotencyStore
 from app.execution.order_manager import ExecutionAgent
 from app.schemas.order import OrderRecord
@@ -39,7 +40,13 @@ class BrokerStub(BaseBroker):
     def get_order(self, order_id: str) -> dict[str, Any]:
         return {"id": order_id}
 
-    def place_order(self, order_intent):
+    def place_order(
+        self,
+        order_intent,
+        *,
+        execution_context: BrokerExecutionContext | None = None,
+    ):
+        self._validate_execution_context(order_intent, execution_context)
         self.place_count += 1
         return BrokerOrderResult(
             broker_order_id="broker-order-1",
@@ -101,7 +108,12 @@ def test_durable_idempotency_store_persists_reserved_key() -> None:
 
     store.reserve(record.intent.idempotency_key, record)
     reloaded = store.get(record.intent.idempotency_key)
+    with session_factory() as session:
+        order_row = session.scalar(select(Order).where(Order.id == record.id))
 
     assert reloaded is not None
     assert reloaded.id == record.id
     assert reloaded.intent.idempotency_key == "durable-idem-1"
+    assert order_row is not None
+    assert order_row.idempotency_key == "durable-idem-1"
+    assert order_row.status == OrderStatus.CREATED

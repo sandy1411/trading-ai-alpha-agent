@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from app.core.config import Settings, get_settings
 from app.core.enums import (
     AccountStatus,
@@ -7,6 +9,7 @@ from app.core.enums import (
     Market,
     RiskDecisionType,
     TradeAction,
+    TradingMode,
 )
 from app.risk.data_freshness import fx_rejection_reason, provider_freshness_reasons
 from app.risk.drawdown import drawdown_reasons
@@ -41,6 +44,7 @@ class RiskEngine:
         compliance_status: ComplianceStatus | None = None,
         system_state: SystemStateSnapshot | None = None,
         signal_id: str | None = None,
+        quote_metrics: Mapping[str, float | int | None] | None = None,
     ) -> RiskDecision:
         config = risk_config or RiskConfig.from_settings(self.settings)
         state = system_state or SystemStateSnapshot.from_settings(self.settings)
@@ -67,6 +71,18 @@ class RiskEngine:
             "trading_mode": state.trading_mode.value,
             "shadow_or_backtest": not state.trading_mode.is_live_capable,
         }
+        normalized_quote_metrics = dict(quote_metrics) if quote_metrics is not None else None
+        if normalized_quote_metrics is not None and candidate.market == Market.US and fx_status:
+            normalized_quote_metrics.setdefault("fx_rate", fx_status.rate)
+        require_quote_metrics = (
+            state.trading_mode == TradingMode.LIVE_AUTONOMOUS
+            and self.settings.live_market_quality_checks_required
+        ) or (
+            state.trading_mode == TradingMode.MICRO_LIVE_AUTONOMOUS
+            and self.settings.micro_live_market_quality_checks_required
+        )
+        risk_metrics["quote_metrics_required"] = require_quote_metrics
+        risk_metrics["quote_metrics_present"] = normalized_quote_metrics is not None
 
         if state.kill_switch:
             rejection_reasons.append("kill_switch_enabled")
@@ -139,10 +155,20 @@ class RiskEngine:
 
         rejection_reasons.extend(drawdown_reasons(portfolio, config))
 
-        liquidity_reason = liquidity_rejection_reason(candidate)
+        liquidity_reason = liquidity_rejection_reason(
+            candidate,
+            settings=self.settings,
+            quote_metrics=normalized_quote_metrics,
+            require_quote_metrics=require_quote_metrics,
+        )
         if liquidity_reason:
             rejection_reasons.append(liquidity_reason)
-        slippage_reason = slippage_rejection_reason(candidate)
+        slippage_reason = slippage_rejection_reason(
+            candidate,
+            settings=self.settings,
+            quote_metrics=normalized_quote_metrics,
+            require_quote_metrics=require_quote_metrics,
+        )
         if slippage_reason:
             rejection_reasons.append(slippage_reason)
         reward_reason = reward_risk_rejection_reason(candidate, config.min_reward_risk_ratio)

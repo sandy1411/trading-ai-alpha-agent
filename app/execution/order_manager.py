@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.brokers.base import BaseBroker
+from app.brokers.base import BaseBroker, _issue_broker_execution_context
 from app.core.config import Settings, get_settings
 from app.core.enums import Market, OrderStatus, ReconciliationState
 from app.core.errors import RiskRejectedError
@@ -42,7 +42,19 @@ class ExecutionAgent:
         record = OrderRecord(intent=intent)
         self.idempotency_store.reserve(intent.idempotency_key, record)
 
-        broker_result = broker.place_order(intent)
+        execution_context = _issue_broker_execution_context(intent)
+        try:
+            broker_result = broker.place_order(intent, execution_context=execution_context)
+        except Exception as exc:
+            record.status = OrderStatus.UNKNOWN_REQUIRES_RECONCILIATION
+            record.reconciliation_state = ReconciliationState.BLOCKING_DUPLICATES
+            record.broker_response = {
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+                "stage": "place_order",
+            }
+            self.idempotency_store.upsert(intent.idempotency_key, record)
+            raise
         record.status = broker_result.status
         record.broker_order_id = broker_result.broker_order_id
         record.broker_response = broker_result.raw_response

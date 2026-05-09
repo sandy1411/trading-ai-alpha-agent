@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.auth import require_control_auth
 from app.core.config import get_settings
 from app.core.enums import TradingMode
 from app.core.errors import RiskRejectedError
@@ -28,13 +29,13 @@ def system_status() -> dict:
     }
 
 
-@router.post("/kill-switch/on")
+@router.post("/kill-switch/on", dependencies=[Depends(require_control_auth)])
 def kill_switch_on() -> dict:
     state = system_state_service.enable_kill_switch()
     return {"kill_switch": state.kill_switch}
 
 
-@router.post("/kill-switch/off")
+@router.post("/kill-switch/off", dependencies=[Depends(require_control_auth)])
 def kill_switch_off() -> dict:
     state = system_state_service.disable_kill_switch()
     return {"kill_switch": state.kill_switch}
@@ -45,7 +46,7 @@ def get_mode() -> dict:
     return {"trading_mode": system_state_service.get_state().trading_mode}
 
 
-@router.post("/mode")
+@router.post("/mode", dependencies=[Depends(require_control_auth)])
 def set_mode(update: ModeUpdate) -> dict:
     try:
         state = system_state_service.set_mode(update.trading_mode)

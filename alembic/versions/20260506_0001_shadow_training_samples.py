@@ -11,12 +11,17 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 
 revision: str = "20260506_0001"
-down_revision: str | Sequence[str] | None = None
+down_revision: str | Sequence[str] | None = "20260506_0000"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+
+def json_type() -> sa.JSON:
+    return sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 
 
 def upgrade() -> None:
@@ -37,7 +42,7 @@ def upgrade() -> None:
         sa.Column("hypothetical_pnl_inr", sa.Numeric(18, 4), nullable=False),
         sa.Column("hypothetical_pnl_pct", sa.Numeric(10, 6), nullable=False),
         sa.Column("sample_kind", sa.String(length=64), nullable=False),
-        sa.Column("metadata_json", sa.JSON(), nullable=False),
+        sa.Column("metadata_json", json_type(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["instrument_id"], ["instruments.id"]),

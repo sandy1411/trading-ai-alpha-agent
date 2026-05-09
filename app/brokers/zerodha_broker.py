@@ -4,9 +4,9 @@ from typing import Any
 
 import httpx
 
-from app.brokers.base import BaseBroker, BrokerAccount, BrokerOrderResult
+from app.brokers.base import BaseBroker, BrokerAccount, BrokerExecutionContext, BrokerOrderResult
 from app.core.config import Settings, get_settings
-from app.core.enums import BrokerName, OrderSide, OrderStatus, OrderType
+from app.core.enums import BrokerName, Market, OrderSide, OrderStatus, OrderType
 from app.core.errors import FailClosedError, MissingCredentialsError
 from app.schemas.order import OrderIntent
 from app.services.zerodha_token_service import load_access_token
@@ -97,9 +97,17 @@ class ZerodhaBroker(BaseBroker):
                 return order
         raise FailClosedError("zerodha_order_not_found")
 
-    def place_order(self, order_intent: OrderIntent) -> BrokerOrderResult:
+    def place_order(
+        self,
+        order_intent: OrderIntent,
+        *,
+        execution_context: BrokerExecutionContext | None = None,
+    ) -> BrokerOrderResult:
+        self._validate_execution_context(order_intent, execution_context)
         if order_intent.broker != BrokerName.ZERODHA:
             raise FailClosedError("order_intent_broker_mismatch")
+        if order_intent.market != Market.INDIA:
+            raise FailClosedError("zerodha_market_not_supported")
         if order_intent.order_type not in {OrderType.MARKET, OrderType.LIMIT}:
             raise FailClosedError("zerodha_order_type_not_supported")
 
