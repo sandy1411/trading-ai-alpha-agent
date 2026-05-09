@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from math import floor
 from typing import Any
 
@@ -16,12 +16,14 @@ from app.data_providers.zerodha_data import ZerodhaDataProvider
 from app.db.models.audit import AuditLog
 from app.db.models.instrument import Instrument
 from app.db.models.risk import RiskDecisionModel, RiskEvent
-from app.db.models.shadow import ShadowObservation
+from app.db.models.shadow import ShadowObservation, ShadowTrainingSample
 from app.db.models.signal import AgentSignal
 from app.db.models.strategy import Strategy
 from app.db.session import SessionLocal
 from app.risk.market_calendar import MarketCalendar
 from app.services.intraday_model_training_service import intraday_model_training_service
+from app.services.market_intelligence_service import market_intelligence_service
+from app.services.shadow_exit_service import shadow_exit_service
 from app.strategies.conservative_shadow import ConservativeShadowStrategy
 
 
@@ -56,6 +58,18 @@ class ShadowTrainingService:
             self._run_india_cycle(session, strategy, result)
             self._run_us_cycle(session, strategy, result)
             result["intraday_model_training"] = self._run_intraday_model_training(session)
+            result["market_intelligence"] = market_intelligence_service.summary(
+                session,
+                brokers=[],
+                providers=[],
+                readiness={
+                    "ready_for_india_shadow_now": not result["india"]["blocked"],
+                    "ready_for_us_shadow_now": not result["us"]["blocked"],
+                    "checks": [],
+                },
+                latest_cycle=result,
+                include_external_health=False,
+            )
             session.add(
                 AuditLog(
                     actor="shadow_training_service",
@@ -131,10 +145,11 @@ class ShadowTrainingService:
                     )
                 )
                 if last_price is not None and last_price > 0:
-                    self._record_shadow_observation(
+                    updated = self._record_shadow_observation(
                         session, instrument, symbol, signal.id, last_price, assessment
                     )
-                    result["shadow_observations_updated"] += 1
+                    if updated:
+                        result["shadow_observations_updated"] += 1
                 result["india"]["observed"] += 1
             except TradingAlphaError as exc:
                 reason = f"{symbol}:{exc}"
@@ -213,7 +228,7 @@ class ShadowTrainingService:
                     )
                 )
                 if last_price is not None and last_price > 0:
-                    self._record_shadow_observation(
+                    updated = self._record_shadow_observation(
                         session,
                         instrument,
                         symbol,
@@ -223,7 +238,8 @@ class ShadowTrainingService:
                         market=Market.US,
                         fx_rate=fx_status.rate,
                     )
-                    result["shadow_observations_updated"] += 1
+                    if updated:
+                        result["shadow_observations_updated"] += 1
                 result["us"]["observed"] += 1
             except TradingAlphaError as exc:
                 reason = f"{symbol}:{exc}"
@@ -272,7 +288,8 @@ class ShadowTrainingService:
         assessment: Any,
         market: Market = Market.INDIA,
         fx_rate: float = 1.0,
-    ) -> None:
+    ) -> bool:
+        now = datetime.now(UTC)
         observation = session.scalar(
             select(ShadowObservation).where(
                 ShadowObservation.strategy_name == self.strategy_name,
@@ -281,11 +298,35 @@ class ShadowTrainingService:
                 ShadowObservation.status == "OPEN_OBSERVATION",
             )
         )
-        now = datetime.now(UTC)
         if observation is None:
-            price_inr = last_price * fx_rate
-            quantity = floor(self.settings.shadow_hypothesis_notional_inr / price_inr)
-            notional = quantity * last_price * fx_rate
+            cooldown = self._active_reentry_cooldown(session, market, symbol, now)
+            if cooldown is not None:
+                self._record_risk_event(
+                    session,
+                    market,
+                    "shadow_reentry_cooldown_active",
+                    (
+                        f"{symbol}: previous shadow exit is cooling down until "
+                        f"{cooldown.isoformat()}; no immediate re-entry opened."
+                    ),
+                    "INFO",
+                )
+                return False
+            loss_pause = self._active_loss_discipline_pause(session, market, symbol, now)
+            if loss_pause is not None:
+                self._record_risk_event(
+                    session,
+                    market,
+                    "shadow_loss_discipline_pause",
+                    (
+                        f"{symbol}: new shadow entry paused by loss discipline. "
+                        f"{loss_pause['reason']}"
+                    ),
+                    "WARN",
+                )
+                return False
+            quantity, notional = self._shadow_size(entry_price=last_price, fx_rate=fx_rate)
+            entry_assessment = assessment.model_dump()
             observation = ShadowObservation(
                 strategy_name=self.strategy_name,
                 market=market,
@@ -308,28 +349,459 @@ class ShadowTrainingService:
                     "source": "ALPACA_DATA" if market == Market.US else "ZERODHA_KITE_QUOTE",
                     "price_currency": "USD" if market == Market.US else "INR",
                     "usd_inr": fx_rate,
-                    "assessment": assessment.model_dump(),
+                    "shadow_notional_per_symbol_inr": self.settings.shadow_hypothesis_notional_inr,
+                    "sizing_policy": "whole_share_shadow_budget",
+                    "assessment": entry_assessment,
+                    "entry_assessment": entry_assessment,
+                    "latest_assessment": entry_assessment,
                 },
             )
             session.add(observation)
+        else:
+            entry_price = float(observation.entry_price)
+            quantity, notional = self._shadow_size(entry_price=entry_price, fx_rate=fx_rate)
+            pnl = (last_price - entry_price) * quantity * fx_rate
+            pnl_pct = pnl / float(notional or 1)
+            existing_metadata = observation.metadata_json or {}
+            entry_assessment = (
+                existing_metadata.get("entry_assessment")
+                or existing_metadata.get("assessment")
+                or assessment.model_dump()
+            )
+            latest_assessment = assessment.model_dump()
+            observation.signal_id = signal_id
+            observation.hypothetical_quantity = quantity
+            observation.hypothetical_notional_inr = notional
+            observation.current_price = last_price
+            observation.last_marked_at = now
+            observation.hypothetical_pnl_inr = pnl
+            observation.hypothetical_pnl_pct = pnl_pct
+            observation.metadata_json = {
+                **existing_metadata,
+                "source": "ALPACA_DATA" if market == Market.US else "ZERODHA_KITE_QUOTE",
+                "price_currency": "USD" if market == Market.US else "INR",
+                "usd_inr": fx_rate,
+                "shadow_notional_per_symbol_inr": self.settings.shadow_hypothesis_notional_inr,
+                "sizing_policy": "whole_share_shadow_budget",
+                "assessment": entry_assessment,
+                "entry_assessment": entry_assessment,
+                "latest_assessment": latest_assessment,
+            }
+        session.flush()
+        self._record_intraday_training_sample(session, observation, signal_id, assessment, fx_rate)
+        self._apply_shadow_exit_policy(
+            session, observation, signal_id, assessment, fx_rate, datetime.now(UTC)
+        )
+        return True
+
+    def _shadow_size(self, *, entry_price: float, fx_rate: float) -> tuple[int, float]:
+        price_inr = entry_price * fx_rate
+        quantity = floor(self.settings.shadow_hypothesis_notional_inr / price_inr) if price_inr > 0 else 0
+        return quantity, quantity * entry_price * fx_rate
+
+    def _record_intraday_training_sample(
+        self,
+        session: Session,
+        observation: ShadowObservation,
+        signal_id: str,
+        assessment: Any,
+        fx_rate: float,
+    ) -> None:
+        observation_metadata = observation.metadata_json or {}
+        entry_assessment = (
+            observation_metadata.get("entry_assessment")
+            or observation_metadata.get("assessment")
+            or assessment.model_dump()
+        )
+        session.add(
+            ShadowTrainingSample(
+                observation_id=observation.id,
+                strategy_name=observation.strategy_name,
+                market=observation.market,
+                symbol=observation.symbol,
+                instrument_id=observation.instrument_id,
+                signal_id=signal_id,
+                sample_at=datetime.now(UTC),
+                entry_price=observation.entry_price,
+                current_price=observation.current_price,
+                hypothetical_quantity=observation.hypothetical_quantity,
+                hypothetical_notional_inr=observation.hypothetical_notional_inr,
+                hypothetical_pnl_inr=observation.hypothetical_pnl_inr,
+                hypothetical_pnl_pct=observation.hypothetical_pnl_pct,
+                sample_kind="INTRADAY_MARK",
+                metadata_json={
+                    "source": "ALPACA_DATA" if observation.market == Market.US else "ZERODHA_KITE_QUOTE",
+                    "price_currency": "USD" if observation.market == Market.US else "INR",
+                    "usd_inr": fx_rate,
+                    "assessment": entry_assessment,
+                    "latest_assessment": assessment.model_dump(),
+                    "shadow_note": "Timestamped intraday training sample only. No order intent created.",
+                },
+            )
+        )
+
+    def _apply_shadow_exit_policy(
+        self,
+        session: Session,
+        observation: ShadowObservation,
+        signal_id: str,
+        assessment: Any,
+        fx_rate: float,
+        now: datetime,
+    ) -> None:
+        if not self.settings.intraday_shadow_exit_enabled:
+            return
+        if observation.status != "OPEN_OBSERVATION":
             return
 
-        entry_price = float(observation.entry_price)
-        quantity = observation.hypothetical_quantity
-        pnl = (last_price - entry_price) * quantity * fx_rate
-        pnl_pct = pnl / float(observation.hypothetical_notional_inr or 1)
-        observation.signal_id = signal_id
-        observation.current_price = last_price
-        observation.last_marked_at = now
-        observation.hypothetical_pnl_inr = pnl
-        observation.hypothetical_pnl_pct = pnl_pct
-        observation.metadata_json = {
-            **(observation.metadata_json or {}),
-            "source": "ALPACA_DATA" if market == Market.US else "ZERODHA_KITE_QUOTE",
-            "price_currency": "USD" if market == Market.US else "INR",
-            "usd_inr": fx_rate,
-            "assessment": assessment.model_dump(),
+        exit_decision = shadow_exit_service.evaluate_observation(observation).model_dump()
+        close_actions = {
+            "EXIT_STOP_LOSS",
+            "EXIT_TAKE_PROFIT",
+            "EXIT_PROFIT_BOOKING",
+            "EXIT_PROFIT_GIVEBACK",
         }
+        if exit_decision["action"] not in close_actions:
+            path_decision = self._profit_path_exit_decision(session, observation)
+            if path_decision and path_decision["action"] in close_actions:
+                exit_decision = path_decision
+
+        if exit_decision["action"] not in close_actions:
+            return
+
+        self._close_shadow_observation(
+            session=session,
+            observation=observation,
+            signal_id=signal_id,
+            assessment=assessment,
+            fx_rate=fx_rate,
+            now=now,
+            exit_decision=exit_decision,
+        )
+
+    def _profit_path_exit_decision(
+        self,
+        session: Session,
+        observation: ShadowObservation,
+    ) -> dict[str, Any] | None:
+        samples = session.scalars(
+            select(ShadowTrainingSample)
+            .where(ShadowTrainingSample.observation_id == observation.id)
+            .order_by(ShadowTrainingSample.sample_at.asc())
+        ).all()
+        if len(samples) < 2:
+            return None
+
+        peak = max(samples, key=lambda sample: float(sample.hypothetical_pnl_inr or 0))
+        peak_pnl = float(peak.hypothetical_pnl_inr or 0)
+        current_pnl = float(observation.hypothetical_pnl_inr or 0)
+        notional = float(observation.hypothetical_notional_inr or 0)
+        peak_pct = float(peak.hypothetical_pnl_pct or 0)
+        current_pct = current_pnl / notional if notional else 0.0
+        giveback = max(peak_pnl - current_pnl, 0.0)
+        giveback_pct = giveback / peak_pnl if peak_pnl > 0 else 0.0
+        can_lock_profit = (
+            peak_pnl >= self.settings.intraday_min_profit_lock_inr
+            or peak_pct >= self.settings.intraday_min_profit_lock_pct
+        )
+        if (
+            can_lock_profit
+            and peak_pnl > 0
+            and giveback_pct >= self.settings.intraday_profit_giveback_exit_pct
+        ):
+            return {
+                "action": "EXIT_PROFIT_GIVEBACK",
+                "label": "Book profit after giveback",
+                "urgency": "HIGH",
+                "reason": (
+                    f"Shadow profit peaked at {peak_pnl:.2f} INR and then gave back "
+                    f"{giveback_pct:.0%}. Freeze the shadow exit instead of watching "
+                    "a good gain fade."
+                ),
+                "progress_to_target": None,
+                "progress_to_stop": None,
+                "reentry_plan": (
+                    "Wait for the re-entry cooldown and a fresh setup. Do not chase "
+                    "the same stock immediately after profit booking."
+                ),
+                "peak_pnl_inr": peak_pnl,
+                "peak_pnl_pct": peak_pct,
+                "current_pnl_inr": current_pnl,
+                "current_pnl_pct": current_pct,
+                "giveback_inr": giveback,
+                "giveback_pct_of_peak": giveback_pct,
+                "shadow_only": True,
+                "no_order_placement": True,
+            }
+        return None
+
+    def _close_shadow_observation(
+        self,
+        *,
+        session: Session,
+        observation: ShadowObservation,
+        signal_id: str,
+        assessment: Any,
+        fx_rate: float,
+        now: datetime,
+        exit_decision: dict[str, Any],
+    ) -> None:
+        status = self._closed_status(exit_decision["action"])
+        reentry_blocked_until = now + timedelta(minutes=self.settings.intraday_reentry_cooldown_minutes)
+        metadata = observation.metadata_json or {}
+        shadow_exit = {
+            "action": exit_decision["action"],
+            "label": exit_decision["label"],
+            "urgency": exit_decision["urgency"],
+            "reason": exit_decision["reason"],
+            "reentry_plan": exit_decision["reentry_plan"],
+            "exited_at": now.isoformat(),
+            "exit_price": float(observation.current_price or 0),
+            "exit_pnl_inr": float(observation.hypothetical_pnl_inr or 0),
+            "exit_pnl_pct": float(observation.hypothetical_pnl_pct or 0),
+            "peak_pnl_inr": exit_decision.get("peak_pnl_inr"),
+            "giveback_inr": exit_decision.get("giveback_inr"),
+            "shadow_only": True,
+            "no_order_placement": True,
+        }
+        observation.status = status
+        observation.metadata_json = {
+            **metadata,
+            "latest_assessment": assessment.model_dump(),
+            "shadow_exit": shadow_exit,
+            "reentry_blocked_until": reentry_blocked_until.isoformat(),
+        }
+        observation.notes = [
+            *(observation.notes or []),
+            (
+                f"Shadow exit recorded: {exit_decision['action']}. "
+                "No broker order was created."
+            ),
+        ]
+        session.add(
+            ShadowTrainingSample(
+                observation_id=observation.id,
+                strategy_name=observation.strategy_name,
+                market=observation.market,
+                symbol=observation.symbol,
+                instrument_id=observation.instrument_id,
+                signal_id=signal_id,
+                sample_at=now,
+                entry_price=observation.entry_price,
+                current_price=observation.current_price,
+                hypothetical_quantity=observation.hypothetical_quantity,
+                hypothetical_notional_inr=observation.hypothetical_notional_inr,
+                hypothetical_pnl_inr=observation.hypothetical_pnl_inr,
+                hypothetical_pnl_pct=observation.hypothetical_pnl_pct,
+                sample_kind="SHADOW_EXIT",
+                metadata_json={
+                    "source": "ALPACA_DATA" if observation.market == Market.US else "ZERODHA_KITE_QUOTE",
+                    "price_currency": "USD" if observation.market == Market.US else "INR",
+                    "usd_inr": fx_rate,
+                    "assessment": metadata.get("entry_assessment") or metadata.get("assessment") or {},
+                    "latest_assessment": assessment.model_dump(),
+                    "shadow_exit": shadow_exit,
+                    "shadow_note": "Closed shadow observation only. No order intent created.",
+                },
+            )
+        )
+        session.add(
+            AuditLog(
+                actor="shadow_training_service",
+                action="shadow_exit_recorded",
+                entity_type="shadow_observation",
+                entity_id=observation.id,
+                message=(
+                    f"{observation.market.value} {observation.symbol}: "
+                    f"{exit_decision['label']} recorded in shadow mode."
+                ),
+                context={
+                    "status": status,
+                    "exit_decision": shadow_exit,
+                    "orders_placed": 0,
+                },
+            )
+        )
+        self._record_risk_event(
+            session,
+            observation.market,
+            "shadow_exit_recorded",
+            (
+                f"{observation.symbol}: {exit_decision['action']} at "
+                f"{float(observation.current_price or 0):.2f}; no order placed."
+            ),
+            "INFO",
+        )
+
+    @staticmethod
+    def _closed_status(action: str) -> str:
+        return {
+            "EXIT_STOP_LOSS": "CLOSED_SHADOW_STOP_LOSS",
+            "EXIT_TAKE_PROFIT": "CLOSED_SHADOW_TAKE_PROFIT",
+            "EXIT_PROFIT_BOOKING": "CLOSED_SHADOW_PROFIT_BOOKED",
+            "EXIT_PROFIT_GIVEBACK": "CLOSED_SHADOW_PROFIT_GIVEBACK",
+        }.get(action, "CLOSED_SHADOW_EXIT")
+
+    def _active_reentry_cooldown(
+        self,
+        session: Session,
+        market: Market,
+        symbol: str,
+        now: datetime,
+    ) -> datetime | None:
+        if self.settings.intraday_reentry_cooldown_minutes <= 0:
+            return None
+        latest_closed = session.scalar(
+            select(ShadowObservation)
+            .where(
+                ShadowObservation.strategy_name == self.strategy_name,
+                ShadowObservation.market == market,
+                ShadowObservation.symbol == symbol,
+                ShadowObservation.status != "OPEN_OBSERVATION",
+            )
+            .order_by(ShadowObservation.last_marked_at.desc())
+            .limit(1)
+        )
+        if latest_closed is None:
+            return None
+        metadata = latest_closed.metadata_json or {}
+        blocked_until_raw = metadata.get("reentry_blocked_until")
+        if not blocked_until_raw:
+            return None
+        try:
+            blocked_until = datetime.fromisoformat(str(blocked_until_raw))
+        except ValueError:
+            return None
+        if blocked_until.tzinfo is None:
+            blocked_until = blocked_until.replace(tzinfo=UTC)
+        return blocked_until if blocked_until > now else None
+
+    def _active_loss_discipline_pause(
+        self,
+        session: Session,
+        market: Market,
+        symbol: str,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        if not self.settings.intraday_loss_discipline_enabled:
+            return None
+
+        market_pause = self._market_loss_pause(session, market, now)
+        if market_pause is not None:
+            return market_pause
+        return self._symbol_loss_pause(session, market, symbol, now)
+
+    def _symbol_loss_pause(
+        self,
+        session: Session,
+        market: Market,
+        symbol: str,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        samples = self._recent_training_samples(
+            session,
+            market=market,
+            symbol=symbol,
+            now=now,
+            limit=max(self.settings.intraday_symbol_loss_pause_min_samples, 1),
+        )
+        sample_count = len(samples)
+        if sample_count < self.settings.intraday_symbol_loss_pause_min_samples:
+            return None
+
+        losers = [sample for sample in samples if float(sample.hypothetical_pnl_inr or 0) < 0]
+        loss_rate = len(losers) / sample_count
+        total_pnl = sum(float(sample.hypothetical_pnl_inr or 0) for sample in samples)
+        total_notional = sum(float(sample.hypothetical_notional_inr or 0) for sample in samples)
+        pnl_pct = total_pnl / total_notional if total_notional > 0 else 0.0
+        loss_threshold_hit = (
+            total_pnl <= -self.settings.intraday_symbol_loss_pause_inr
+            or pnl_pct <= -self.settings.intraday_symbol_loss_pause_pct
+        )
+        if loss_rate < self.settings.intraday_symbol_loss_pause_loss_rate or not loss_threshold_hit:
+            return None
+
+        return {
+            "scope": "SYMBOL",
+            "reason": (
+                f"Recent {market.value} {symbol} samples show {loss_rate:.0%} losing marks, "
+                f"{total_pnl:.2f} INR shadow P&L, and {pnl_pct:.2%} return over the "
+                f"last {sample_count} samples. Wait for a cleaner setup instead of "
+                "opening a fresh shadow entry."
+            ),
+            "sample_count": sample_count,
+            "loss_rate": loss_rate,
+            "total_pnl_inr": total_pnl,
+            "pnl_pct": pnl_pct,
+            "shadow_only": True,
+            "no_order_placement": True,
+        }
+
+    def _market_loss_pause(
+        self,
+        session: Session,
+        market: Market,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        samples = self._recent_training_samples(
+            session,
+            market=market,
+            symbol=None,
+            now=now,
+            limit=max(self.settings.intraday_market_loss_pause_min_samples, 1),
+        )
+        sample_count = len(samples)
+        if sample_count < self.settings.intraday_market_loss_pause_min_samples:
+            return None
+
+        winners = [sample for sample in samples if float(sample.hypothetical_pnl_inr or 0) > 0]
+        win_rate = len(winners) / sample_count
+        total_pnl = sum(float(sample.hypothetical_pnl_inr or 0) for sample in samples)
+        if (
+            win_rate > self.settings.intraday_market_loss_pause_win_rate
+            or total_pnl > -self.settings.intraday_market_loss_pause_inr
+        ):
+            return None
+
+        return {
+            "scope": "MARKET",
+            "reason": (
+                f"Recent {market.value} market samples show only {win_rate:.0%} winners "
+                f"and {total_pnl:.2f} INR shadow P&L across the last {sample_count} "
+                "samples. Pause new entries and keep only risk/profit-protection updates."
+            ),
+            "sample_count": sample_count,
+            "win_rate": win_rate,
+            "total_pnl_inr": total_pnl,
+            "shadow_only": True,
+            "no_order_placement": True,
+        }
+
+    def _recent_training_samples(
+        self,
+        session: Session,
+        *,
+        market: Market,
+        symbol: str | None,
+        now: datetime,
+        limit: int,
+    ) -> list[ShadowTrainingSample]:
+        lookback_start = now - timedelta(minutes=self.settings.intraday_loss_discipline_lookback_minutes)
+        query = (
+            select(ShadowTrainingSample)
+            .where(
+                ShadowTrainingSample.strategy_name == self.strategy_name,
+                ShadowTrainingSample.market == market,
+                ShadowTrainingSample.sample_at >= lookback_start,
+                ShadowTrainingSample.hypothetical_quantity > 0,
+                ShadowTrainingSample.hypothetical_notional_inr > 0,
+            )
+            .order_by(ShadowTrainingSample.sample_at.desc())
+            .limit(limit)
+        )
+        if symbol is not None:
+            query = query.where(ShadowTrainingSample.symbol == symbol)
+        return list(session.scalars(query).all())
 
     def _record_risk_event(
         self,

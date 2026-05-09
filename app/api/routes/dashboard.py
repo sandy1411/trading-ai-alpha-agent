@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi.encoders import jsonable_encoder
@@ -11,10 +12,13 @@ from app.services.performance_service import performance_service
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 STREAM_INTERVAL_SECONDS = 5
+DASHBOARD_HTML_PATH = Path(__file__).resolve().parents[1] / "static" / "dashboard.html"
 
 
 @router.get("", response_class=HTMLResponse)
 def dashboard() -> str:
+    if DASHBOARD_HTML_PATH.exists():
+        return DASHBOARD_HTML_PATH.read_text(encoding="utf-8")
     return DASHBOARD_HTML
 
 

@@ -1,0 +1,2014 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sandy-Trading-AI Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef2f5;
+      --panel: #ffffff;
+      --panel-soft: #f7faf9;
+      --ink: #101828;
+      --muted: #667085;
+      --line: #d5dde5;
+      --good: #087443;
+      --warn: #a15c00;
+      --bad: #b42318;
+      --accent: #175cd3;
+      --teal: #027a71;
+      --violet: #6941c6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 22px;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 22px; line-height: 1.2; letter-spacing: 0; }
+    h2 { font-size: 15px; margin-bottom: 10px; }
+    h3 { font-size: 13px; margin-bottom: 8px; }
+    main { max-width: 1580px; margin: 0 auto; padding: 16px 22px 28px; }
+    button, .link-button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 8px 11px;
+      font-weight: 760;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    button:hover, button.active, .link-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f3f7ff;
+    }
+    button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    nav {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 8px;
+      margin-bottom: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    tbody tr:hover { background: #f8fbff; }
+    tbody tr.row-profit { background: #f3fbf7; }
+    tbody tr.row-loss { background: #fff5f2; }
+    tbody tr.row-flat { background: #fffdf4; }
+    .direction {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+    }
+    .direction.up { color: var(--good); background: #eaf8f1; }
+    .direction.down { color: var(--bad); background: #fff0ec; }
+    .direction.flat { color: var(--warn); background: #fff8e8; }
+    .top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .subtle { color: var(--muted); font-size: 13px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-width: 0;
+      overflow: visible;
+    }
+    .band {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      padding: 14px;
+    }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+    .headline { font-size: 28px; line-height: 1.18; font-weight: 850; margin-top: 6px; overflow-wrap: anywhere; }
+    .value { font-size: 24px; line-height: 1.1; font-weight: 850; margin-top: 4px; overflow-wrap: anywhere; }
+    .value.small { font-size: 18px; }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; font-weight: 800; }
+    .row { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #edf1f5; }
+    .row:last-child { border-bottom: 0; }
+    .stack { display: grid; gap: 8px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      width: fit-content;
+      max-width: 100%;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      font-size: 12px;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+    .pill.good { color: var(--good); border-color: #a8dbc7; background: #edf8f3; }
+    .pill.warn { color: var(--warn); border-color: #f2d197; background: #fff8e8; }
+    .pill.bad { color: var(--bad); border-color: #eeb3ab; background: #fff2ef; }
+    .pill.accent { color: var(--accent); border-color: #bad2ff; background: #f3f7ff; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; display: inline-block; }
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .accent { color: var(--accent); }
+    .teal { color: var(--teal); }
+    .violet { color: var(--violet); }
+    .table-wrap { overflow-x: auto; }
+    .metric-band {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(135px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+      min-width: 0;
+    }
+    .helpable {
+      position: relative;
+      cursor: help;
+    }
+    .helpable::before {
+      content: "?";
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 3;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid #c8d5e2;
+      background: #ffffff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .helpable::after {
+      content: attr(data-help);
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 10px;
+      right: 10px;
+      z-index: 30;
+      min-width: min(320px, calc(100vw - 44px));
+      max-width: min(460px, calc(100vw - 44px));
+      padding: 10px 11px;
+      border-radius: 8px;
+      border: 1px solid #b7c4d4;
+      background: #101828;
+      color: #ffffff;
+      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.22);
+      font-size: 12px;
+      line-height: 1.38;
+      font-weight: 650;
+      text-transform: none;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+    .helpable:hover::after, .helpable:focus::after, .helpable:focus-within::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .helpable:hover::before, .helpable:focus::before, .helpable:focus-within::before {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .stat.helpable, .event.helpable, .day-card.helpable, .profile.helpable, .progress-line.helpable {
+      padding-right: 34px;
+    }
+    .row.helpable {
+      padding-right: 30px;
+    }
+    .row.helpable::before, .progress-line.helpable::before {
+      top: 7px;
+      right: 0;
+    }
+    .row.helpable::after, .progress-line.helpable::after {
+      left: auto;
+      right: 0;
+      width: min(360px, calc(100vw - 44px));
+    }
+    .pill.helpable::before {
+      display: none;
+    }
+    .pill.helpable::after {
+      left: 0;
+      right: auto;
+      width: min(320px, calc(100vw - 44px));
+    }
+    .desk {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+      gap: 12px;
+      align-items: stretch;
+      margin-bottom: 12px;
+    }
+    .market-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .market-box { border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); padding: 12px; display: grid; gap: 8px; }
+    .ticker-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+    .events { display: grid; gap: 8px; }
+    .event { border-left: 3px solid var(--line); padding: 9px 10px; border-radius: 0 8px 8px 0; background: #fbfcff; }
+    .event.good { border-color: var(--good); }
+    .event.warn { border-color: var(--warn); }
+    .event.bad { border-color: var(--bad); }
+    .event.accent { border-color: var(--accent); }
+    .bar { height: 8px; border-radius: 999px; background: #e8edf4; overflow: hidden; margin-top: 7px; }
+    .bar > div { height: 100%; width: 0; background: var(--good); }
+    .profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .profile { border: 1px solid var(--line); border-radius: 8px; background: #fbfcff; padding: 12px; display: grid; gap: 7px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 10px; }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 12px;
+      min-width: 0;
+    }
+    .summary-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .big-number { font-size: 30px; line-height: 1.05; font-weight: 880; margin-top: 4px; overflow-wrap: anywhere; }
+    .plain-list { display: grid; gap: 7px; margin-top: 8px; }
+    .plain-list div { padding: 8px 9px; border-left: 3px solid var(--accent); background: #fbfcff; border-radius: 0 8px 8px 0; }
+    .progress-line { display: grid; gap: 6px; }
+    .progress-line strong { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+    .day-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .day-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+      display: grid;
+      gap: 9px;
+      min-width: 0;
+    }
+    .day-card.good { border-color: #a8dbc7; background: #f4fbf7; }
+    .day-card.bad { border-color: #eeb3ab; background: #fff6f3; }
+    .day-card.warn { border-color: #f2d197; background: #fffaf0; }
+    .stock-mini {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: 8px;
+      background: #fbfcff;
+      border: 1px solid #edf1f5;
+      font-size: 13px;
+    }
+    .footer-note { margin-top: 14px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 1120px) {
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 12; }
+      .desk, .metric-band, .profile-grid, .market-strip, .stat-grid, .summary-split, .day-grid { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      main { padding: 12px; }
+      .headline { font-size: 23px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Sandy-Trading-AI</h1>
+      <div class="subtle">Live shadow trading desk with stop-loss, target, P&L, and risk visibility</div>
+    </div>
+    <div class="top-actions">
+      <span id="streamStatus" class="pill warn"><span class="dot"></span> Connecting</span>
+      <span id="modePill" class="pill">Mode</span>
+      <span id="killPill" class="pill">Kill switch</span>
+      <button id="pauseBtn">Pause Dashboard</button>
+      <button id="refreshBtn">Refresh</button>
+      <button id="runShadowBtn" class="primary">Run Shadow Cycle</button>
+    </div>
+  </header>
+  <main>
+    <nav aria-label="Dashboard sections">
+      <button class="active" data-tab="desk">Live Desk</button>
+      <button data-tab="journal">Trade Journal</button>
+      <button data-tab="pnl">Profit / Loss</button>
+      <button data-tab="stocks">India / US Markets</button>
+      <button data-tab="intraday">Intraday Setups</button>
+      <button data-tab="agents">Market Agents</button>
+      <button data-tab="daily">Daily Review</button>
+      <button data-tab="training">Training</button>
+      <button data-tab="safety">Risk & Safety</button>
+    </nav>
+
+    <section id="desk" class="tab active">
+      <div class="grid">
+        <div class="panel span-12">
+          <div class="label">Plain-English Mission Control</div>
+          <div id="deskHeadline" class="headline">Loading live shadow-trading status...</div>
+          <div id="deskDetail" class="subtle" style="margin-top:8px"></div>
+          <div id="deskPills" class="ticker-grid" style="margin-top:12px"></div>
+          <div id="missionStats" class="stat-grid" style="margin-top:14px"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Intraday Profit Protection</h2>
+          <div class="subtle">Tracks the current open-session peak P&L, current P&L, and profit fade. When markets are closed, this panel should stay empty instead of showing old data.</div>
+          <div id="profitProtectionStats" class="stat-grid" style="margin-top:12px"></div>
+          <div id="profitBookingStats" class="stat-grid" style="margin-top:12px"></div>
+          <div class="summary-split" style="margin-top:12px">
+            <div>
+              <h3>Should lock profit</h3>
+              <div id="shouldLockProfitRows" class="events"></div>
+            </div>
+            <div>
+              <h3>Near stop</h3>
+              <div id="nearStopRows" class="events"></div>
+            </div>
+          </div>
+          <div class="summary-split" style="margin-top:12px">
+            <div>
+              <h3>Shadow profit booked</h3>
+              <div id="bookedProfitRows" class="events"></div>
+            </div>
+            <div>
+              <h3>Shadow stop-loss booked</h3>
+              <div id="bookedLossRows" class="events"></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel span-7">
+          <h2>Live Market Data</h2>
+          <div class="subtle">This first page only shows current-session rows from markets that are open and freshly updated. Yesterday and older sessions live in Profit / Loss.</div>
+          <div id="notionalExplain" class="event warn" style="margin-top:10px"></div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Market</th><th>Stock</th><th>Buy Price</th><th>Current Price</th><th>Shadow Used</th><th>P&L</th><th>Stop Loss</th><th>Profit Target</th><th>Exit Plan</th><th>Simple Read</th></tr></thead>
+              <tbody id="todayPickRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel span-5">
+          <h2>What The Algorithm Learned</h2>
+          <div id="learningRows" class="events"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Agent Consensus</h2>
+          <div class="subtle">Multiple shadow-only agents review session readiness, news/sentiment availability, price action, profit protection, provider health, learning speed, and risk. They cannot place orders.</div>
+          <div id="frontAgentConsensus" class="events" style="margin-top:10px"></div>
+        </div>
+        <div class="panel span-6">
+          <h2>India Live Status</h2>
+          <div id="frontIndiaSimple" class="stack"></div>
+        </div>
+        <div class="panel span-6">
+          <h2>US Live Status</h2>
+          <div id="frontUSSimple" class="stack"></div>
+        </div>
+        <div class="panel span-6">
+          <h2>Best And Worst Ideas</h2>
+          <div id="bestWorstRows" class="events"></div>
+        </div>
+        <div class="panel span-6">
+          <h2>How The Engine Improves</h2>
+          <div id="improvementRows" class="plain-list"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Exit Outcome Review</h2>
+          <div class="subtle">This groups intraday samples into ideas and asks the useful question: did the idea touch target, touch stop, or simply finish positive/negative?</div>
+          <div id="outcomeRows" class="events" style="margin-top:10px"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Smart Sell / Re-entry Plan</h2>
+          <div class="subtle">This is shadow-only exit intelligence. It tells us when an idea would take profit, cut loss, hold, or wait for a cleaner re-entry. No order is placed from this table.</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Market</th><th>Stock</th><th>Now</th><th>P&L</th><th>Peak P&L</th><th>Giveback</th><th>Protection / Exit Decision</th><th>Exit reason</th><th>Re-entry Rule</th></tr></thead>
+              <tbody id="exitDecisionRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel span-12">
+          <h2>Intraday Stop-Loss View</h2>
+          <div class="subtle">Intraday means same-day entry and exit. Stop loss is the safety price where the idea should be treated as wrong. Profit target is the price where the bot would prefer to exit with gain.</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Market</th><th>Stock</th><th>Signal</th><th>Entry</th><th>Now</th><th>Stop Loss</th><th>Profit Target</th><th>Reward/Risk</th><th>Current P&L</th><th>Exit Plan</th><th>Learning</th></tr></thead>
+              <tbody id="simpleIntradayRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel span-12">
+          <h2>Training Progress</h2>
+          <div class="summary-split">
+            <div id="trainingProgressRows" class="stack"></div>
+            <div id="featureLearningRows" class="events"></div>
+          </div>
+        </div>
+        <div class="panel span-12">
+          <h2>Safety First</h2>
+          <div id="simpleSafetyRows" class="stack"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="journal" class="tab">
+      <div class="grid">
+        <div class="panel span-12">
+          <div class="label">Buy / Sell / Profit / Loss</div>
+          <div id="journalHeadline" class="headline">Loading simple trade journal...</div>
+          <div id="journalDetail" class="subtle" style="margin-top:8px"></div>
+          <div id="journalStats" class="stat-grid" style="margin-top:14px"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Plain Meaning</h2>
+          <div id="plainGuideRows" class="events"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Shadow Trade Journal</h2>
+          <div class="subtle">Each row is a shadow learning row, not a broker trade. Buy means hypothetical entry. Sell means shadow exit/profit booking/stop exit.</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Time</th><th>Market</th><th>Stock</th><th>What happened</th><th>Buy price</th><th>Sell / Now</th><th>Qty</th><th>Shadow amount</th><th>Profit / Loss</th><th>Stop loss</th><th>Profit target</th><th>Simple reason</th></tr></thead>
+              <tbody id="tradeJournalRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel span-12">
+          <h2>Real Broker Orders</h2>
+          <div class="subtle">This table must stay empty or zero while we are in shadow mode.</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Time</th><th>Market</th><th>Broker</th><th>Stock</th><th>Buy/Sell</th><th>Qty</th><th>Type</th><th>Status</th><th>Broker order id</th></tr></thead>
+              <tbody id="realOrderJournalRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="agents" class="tab">
+      <div class="grid">
+        <div class="panel span-12">
+          <div class="label">Analysis Agents</div>
+          <div id="agentHeadline" class="headline">Loading market-intelligence agents...</div>
+          <div id="agentDetail" class="subtle" style="margin-top:8px"></div>
+          <div id="agentPills" class="ticker-grid" style="margin-top:12px"></div>
+          <div style="margin-top:12px"><a class="link-button" href="/shadow/agents/status" target="_blank" rel="noreferrer">Agent Status JSON</a></div>
+        </div>
+        <div class="panel span-6">
+          <h2>Agent Consensus</h2>
+          <div id="agentConsensusRows" class="events"></div>
+        </div>
+        <div class="panel span-6">
+          <h2>News & Sentiment Guard</h2>
+          <div class="subtle">Sentiment is caution-only. It can never upgrade a trade to BUY and is unavailable unless real headline ingestion is fresh.</div>
+          <div id="newsSentimentRows" class="events" style="margin-top:10px"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Shadow-only Agent Output</h2>
+          <div id="agentCards" class="profile-grid"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Agent Details</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Agent</th><th>Status</th><th>Confidence</th><th>What It Watches</th><th>Main Finding</th><th>Risk / Caution</th><th>Orders Placed</th></tr></thead>
+              <tbody id="agentDetailRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pnl" class="tab">
+      <div class="grid">
+        <div class="panel span-12">
+          <div class="label">Day-wise Profit / Loss</div>
+          <div id="pnlHeadline" class="headline">Loading shadow P&L history...</div>
+          <div id="pnlDetail" class="subtle" style="margin-top:8px"></div>
+          <div id="pnlStats" class="stat-grid" style="margin-top:14px"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Day Cards</h2>
+          <div id="dayPnlCards" class="day-grid"></div>
+        </div>
+        <div class="panel span-8">
+          <h2>Day-wise Shadow P&L Table</h2>
+          <div class="subtle">One row per day. P&L is hypothetical shadow result, not broker-realized profit.</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Date</th><th>Stocks Tested</th><th>Shadow Amount</th><th>Net P&L</th><th>Up / Down / Flat</th><th>Best Helped</th><th>Most Loss</th></tr></thead>
+              <tbody id="dayPnlRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel span-4">
+          <h2>Latest Completed Day Highlights</h2>
+          <div id="dayPnlHighlights" class="events"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Latest Completed Day Stock Breakdown</h2>
+          <div class="subtle">Shows which stocks helped and which gave loss on the latest completed day with samples.</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead><tr><th>Market</th><th>Stock</th><th>Direction</th><th>Entry</th><th>Latest</th><th>Qty</th><th>Shadow Amount</th><th>P&L</th></tr></thead>
+              <tbody id="latestDayStockRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stocks" class="tab">
+      <div class="band">
+        <h2>Stocks Watchlist</h2>
+        <div class="subtle">Configured symbols, market readiness, live provider status, and current shadow P&L.</div>
+      </div>
+      <div class="market-strip">
+        <div class="market-box"><h2>India Stocks</h2><div id="indiaMarketCard" class="stack"></div><div id="indiaSymbols" class="ticker-grid"></div></div>
+        <div class="market-box"><h2>US Stocks / ETFs</h2><div id="usMarketCard" class="stack"></div><div id="usSymbols" class="ticker-grid"></div></div>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <div class="panel span-6">
+          <h2>India Shadow Book</h2>
+          <div class="table-wrap"><table><thead><tr><th>Stock</th><th>Entry</th><th>Stop</th><th>Target</th><th>R/R</th><th>P&L</th><th>Marked</th></tr></thead><tbody id="indiaRows"></tbody></table></div>
+        </div>
+        <div class="panel span-6">
+          <h2>US Shadow Book</h2>
+          <div class="table-wrap"><table><thead><tr><th>Stock</th><th>Entry</th><th>Stop</th><th>Target</th><th>R/R</th><th>P&L INR</th><th>Marked</th></tr></thead><tbody id="usRows"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="intraday" class="tab">
+      <div class="grid">
+        <div class="panel span-5">
+          <h2>Intraday Control</h2>
+          <div id="intradayControl" class="stack"></div>
+        </div>
+        <div class="panel span-7">
+          <h2>Intraday Risk & Exit Plan</h2>
+          <div id="intradayRiskPlan" class="events"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Intraday Setups With Stop Loss And Profit Target</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Stock</th><th>Market</th><th>Signal</th><th>Confidence</th><th>Entry</th><th>Now</th><th>Stop Loss</th><th>Profit Target</th><th>Risk</th><th>Reward</th><th>R/R</th><th>P&L</th><th>Exit Plan</th></tr></thead>
+              <tbody id="intradayRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="daily" class="tab">
+      <div class="grid">
+        <div class="panel span-12">
+          <h2>Daily Shadow Review</h2>
+          <div id="dailySubtitle" class="subtle"></div>
+        </div>
+        <div class="panel span-6"><h2>India Daily Review</h2><div id="indiaDaily" class="stack"></div></div>
+        <div class="panel span-6"><h2>US Daily Review</h2><div id="usDaily" class="stack"></div></div>
+        <div class="panel span-12">
+          <h2>Market Comparison</h2>
+          <div class="table-wrap"><table><thead><tr><th>Market</th><th>Date</th><th>Signals</th><th>Shadow Marks</th><th>Real Orders</th><th>Would-Have P&L</th><th>Win/Loss/Flat</th></tr></thead><tbody id="dailyComparison"></tbody></table></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Everyday P&L History</h2>
+          <div class="table-wrap"><table><thead><tr><th>Date</th><th>India P&L</th><th>India Marks</th><th>US P&L</th><th>US Marks</th><th>Total Shadow P&L</th><th>Real Orders</th></tr></thead><tbody id="historyRows"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="training" class="tab">
+      <div class="grid">
+        <div class="panel span-5">
+          <h2>Intraday Model Training</h2>
+          <div id="modelState" class="stack"></div>
+        </div>
+        <div class="panel span-7">
+          <h2>Algorithm Diagnostics</h2>
+          <div id="modelActions" class="events"></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Model Feature Diagnostics</h2>
+          <div class="table-wrap"><table><thead><tr><th>Feature</th><th>Samples</th><th>Correlation To P&L</th><th>Hint</th></tr></thead><tbody id="featureRows"></tbody></table></div>
+        </div>
+        <div class="panel span-12">
+          <h2>Strategy Lab</h2>
+          <h3>Intraday Strategy Playbook</h3>
+          <div id="strategyProfiles" class="profile-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="safety" class="tab">
+      <div class="grid">
+        <div class="panel span-6">
+          <h2>Risk & Safety</h2>
+          <div id="riskRows" class="stack"></div>
+        </div>
+        <div class="panel span-6">
+          <h2>Broker & Provider Health</h2>
+          <div id="healthRows" class="events"></div>
+        </div>
+        <div class="panel span-6">
+          <h2>Zerodha Daily Auth</h2>
+          <div id="zerodhaRows" class="stack"></div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+            <a class="link-button" href="/zerodha/login" target="_blank" rel="noreferrer">Open Zerodha Login</a>
+            <button id="reconnectBtn">Reconnect</button>
+          </div>
+        </div>
+        <div class="panel span-6">
+          <h2>Email Status</h2>
+          <div id="emailRows" class="stack"></div>
+          <div class="subtle" style="margin-top:8px">Delivery mode is local Mailpit unless external SMTP is configured.</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px">
+            <a class="link-button" href="http://127.0.0.1:8025" target="_blank" rel="noreferrer">Open Mailpit</a>
+            <button id="sendEmailBtn">Send Summary Email</button>
+          </div>
+        </div>
+        <div class="panel span-12">
+          <h2>Shadow Ledger</h2>
+          <div class="subtle">Shadow transactions only. These are not Zerodha orders, broker fills, or recommendations.</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table><thead><tr><th>Stock</th><th>Market</th><th>Status</th><th>Entry</th><th>Current</th><th>Stop</th><th>Target</th><th>Qty</th><th>Hyp. Notional</th><th>Hyp. P&L</th><th>Marked</th></tr></thead><tbody id="ledgerRows"></tbody></table>
+          </div>
+        </div>
+        <div class="panel span-12">
+          <h2>Orders</h2>
+          <div class="table-wrap"><table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody id="orderRows"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-note">No live order endpoint is exposed from this dashboard. Live Feed refreshes through /dashboard/ws. Learned signals remain shadow-only until deterministic risk, compliance, provider, broker, FX, calendar, and kill-switch gates pass.</div>
+  </main>
+
+  <script>
+    let latestData = null;
+    let socket = null;
+    let paused = false;
+    let messageCount = 0;
+    let transport = "polling";
+    let fallbackTimer = null;
+
+    const q = (id) => document.getElementById(id);
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+    const num = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 });
+    const fmtInr = (value) => `INR ${inr.format(Number(value || 0))}`;
+    const pct = (value) => `${(Number(value || 0) * 100).toFixed(2)}%`;
+    const shortTime = (value) => value ? new Date(value).toLocaleString("en-IN", { hour12: false }) : "-";
+    const pnlClass = (value) => Number(value || 0) > 0 ? "good" : (Number(value || 0) < 0 ? "bad" : "warn");
+    const emptyRow = (cols, text) => `<tr><td colspan="${cols}" class="subtle">${esc(text)}</td></tr>`;
+    const HELP_TEXT = {
+      "Real money used": "Actual cash sent to Zerodha or Alpaca today. In shadow mode this should be INR 0.",
+      "Live shadow tested": "The amount the bot is only pretending to test on fresh live-market rows. This is learning money, not real money.",
+      "Per-stock shadow budget": "The rough pretend amount used per stock idea so we can compare stocks fairly.",
+      "Full-cycle target": "If every configured stock gets one shadow row, this is the total pretend exposure being studied.",
+      "Live session P&L": "Profit or loss from only the fresh rows visible on the Live Desk. It is not real cash.",
+      "Booked shadow P&L": "Profit or loss frozen by the shadow exit rules, such as profit booking or stop-loss.",
+      "Up / down / flat": "How many watched ideas are positive, negative, or almost unchanged right now.",
+      "Training samples": "How many timestamped learning rows are saved versus the target needed before trusting patterns.",
+      "Stop-loss coverage": "Percent of shadow ideas that have a safety exit price. This must stay close to 100%.",
+      "Peak live P&L": "The best profit the current live shadow session has shown so far.",
+      "Peak session P&L": "The best profit seen inside the selected shadow session.",
+      "Current live P&L": "The latest profit or loss for fresh live shadow rows.",
+      "Current session P&L": "The latest profit or loss inside the selected shadow session.",
+      "Giveback from peak": "How much profit faded after the best point. A high number means we may have waited too long.",
+      "Protection status": "How many profit-protection or stop-loss alerts are active.",
+      "Profit booked live": "Shadow profit exits fired in the current live session only.",
+      "Profit booked": "Shadow exits that locked a gain. No real sell order was placed.",
+      "Stop/protective exits": "Shadow exits that cut loss or protected from a bigger loss.",
+      "Net booked result": "Profit-booking exits plus stop-loss exits in shadow mode.",
+      "Booking mode": "Shows whether exits are only shadow learning or real broker execution. This should say Shadow.",
+      "Booking trigger": "The rule that decides when profit is good enough to lock in shadow mode.",
+      "Days tracked": "How many trading days have saved shadow learning data.",
+      "Latest completed P&L": "Profit or loss from the most recent completed day with data. This is hypothetical.",
+      "Latest stocks tested": "How many stocks had shadow rows on the latest completed day.",
+      "Total shadow amount": "Pretend money studied across all shown days.",
+      "Total shadow P&L": "Total hypothetical profit or loss across all shown days.",
+      "Real orders": "Number of real broker orders found. This must stay zero while we are learning in shadow mode.",
+      "Shadow buy entries": "Rows where the bot would have started watching a pretend buy position.",
+      "Shadow sell/exits": "Rows where the bot would have closed or protected the pretend position.",
+      "Rows in profit": "Shadow rows currently showing gain.",
+      "Rows in loss": "Shadow rows currently showing loss.",
+      "Recent net P&L": "Total profit or loss from the recent shadow rows shown in the journal.",
+      "Real broker orders": "Actual Zerodha or Alpaca orders. In shadow mode this should stay zero.",
+      "Overall data collected": "Total learning rows saved for intraday model review.",
+      "India samples": "Intraday learning rows collected from India-market symbols.",
+      "US samples": "Intraday learning rows collected from US-market symbols.",
+    };
+    const SECTION_HELP = {
+      "Plain-English Mission Control": "Quick safety and learning summary. This is the easiest place to see whether the bot is only watching or doing anything risky.",
+      "Intraday Profit Protection": "Shows whether the bot would lock profit, cut loss, or keep watching in shadow mode.",
+      "Live Market Data": "Only fresh rows from open markets should appear here. Old data belongs in the Profit / Loss pages.",
+      "What The Algorithm Learned": "Plain notes about what today's shadow rows are teaching the engine.",
+      "Agent Consensus": "Independent shadow-only checks for readiness, news, provider health, risk, and learning quality.",
+      "India Live Status": "Simple India-market status and latest shadow tracking numbers.",
+      "US Live Status": "Simple US-market status and latest shadow tracking numbers.",
+      "Best And Worst Ideas": "The strongest and weakest recent shadow ideas so we can study what helped and what hurt.",
+      "How The Engine Improves": "Concrete next changes the system should study before any live trading.",
+      "Exit Outcome Review": "Checks whether ideas reached target, stop loss, or ended positive or negative.",
+      "Smart Sell / Re-entry Plan": "Shows where the shadow engine would exit and when it would wait before trying again.",
+      "Intraday Stop-Loss View": "Every current intraday idea with entry, stop loss, target, and current result.",
+      "Training Progress": "How much learning data has been collected and whether it is enough to trust.",
+      "Safety First": "The live-order blockers. These are intentionally conservative.",
+      "Buy / Sell / Profit / Loss": "Plain trade journal summary: pretend buys, pretend exits, profit rows, loss rows, and real orders.",
+      "Plain Meaning": "Simple definitions for buy, sell, stop loss, and profit target.",
+      "Shadow Trade Journal": "Every recent shadow row in simple language. These are not broker trades.",
+      "Real Broker Orders": "Real Zerodha or Alpaca orders. This should stay empty in shadow mode.",
+      "Day-wise Profit / Loss": "History by day so yesterday and older sessions do not look like live data.",
+      "Day Cards": "A quick card view of each day with shadow P&L and India/US split.",
+      "Day-wise Shadow P&L Table": "One row per day showing pretend amount tested and hypothetical result.",
+      "Latest Completed Day Highlights": "The plain-English summary for the most recent completed day.",
+      "Latest Completed Day Stock Breakdown": "Stock-level details for the latest completed day.",
+      "Stocks Watchlist": "The symbols configured for India and US shadow research.",
+      "India Stocks": "India symbols and current India shadow readiness.",
+      "US Stocks / ETFs": "US symbols and current US shadow readiness.",
+      "India Shadow Book": "Recent India-market shadow rows only.",
+      "US Shadow Book": "Recent US-market shadow rows only.",
+      "Intraday Control": "Current intraday learning mode, speed, sample count, and safety posture.",
+      "Intraday Risk & Exit Plan": "Actions the model should take to stay conservative while learning intraday behavior.",
+      "Intraday Setups With Stop Loss And Profit Target": "Current intraday ideas with planned safety exit and profit target.",
+      "Daily Shadow Review": "Brief daily review separated for India and US.",
+      "India Daily Review": "India-only daily shadow result and lessons.",
+      "US Daily Review": "US-only daily shadow result and lessons.",
+      "Market Comparison": "India versus US daily shadow result in one table.",
+      "Everyday P&L History": "Past daily shadow P&L for India and US.",
+      "Intraday Model Training": "Model readiness and whether enough samples exist.",
+      "Algorithm Diagnostics": "What the algorithm should improve next based on saved samples.",
+      "Model Feature Diagnostics": "Early clues about which inputs may relate to P&L. Do not trust them until samples are high.",
+      "Strategy Lab": "Candidate strategy profiles. Disabled or shadow-only profiles cannot place orders.",
+      "Risk & Safety": "The hard safety gates that must block live trading unless all checks pass.",
+      "Broker & Provider Health": "Whether Zerodha, Alpaca, data providers, and freshness checks are healthy.",
+      "Zerodha Daily Auth": "Daily Kite token status. Zerodha requires a fresh user login token flow.",
+      "Email Status": "Where the daily summary email is sent or previewed.",
+      "Shadow Ledger": "Detailed shadow ledger. These rows are not real broker fills.",
+      "Orders": "Order counts by status. In shadow mode these should be empty or zero.",
+    };
+    function compactHelp(value) {
+      return String(value ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    }
+    function clipHelp(value) {
+      const text = compactHelp(value);
+      return text.length > 240 ? `${text.slice(0, 237)}...` : text;
+    }
+    function helpFor(label, detail = "") {
+      const key = compactHelp(label);
+      const known = HELP_TEXT[key] || SECTION_HELP[key];
+      if (known) return clipHelp(`${known} ${detail ? "Current detail: " + compactHelp(detail) : ""}`);
+      return clipHelp(`${key}: ${detail || "This tile explains one part of the trading bot in simple language."}`);
+    }
+    function helpAttrs(label, detail = "") {
+      const text = helpFor(label, detail);
+      return `title="${esc(text)}" data-help="${esc(text)}" tabindex="0"`;
+    }
+    function setHelp(element, label, detail = "") {
+      if (!element) return;
+      const text = helpFor(label, detail);
+      element.classList.add("helpable");
+      element.setAttribute("title", text);
+      element.setAttribute("data-help", text);
+      element.setAttribute("tabindex", "0");
+    }
+    const row = (label, value) => `<div class="row helpable" ${helpAttrs(label, value)}><span class="subtle">${esc(label)}</span><strong>${esc(value)}</strong></div>`;
+    const pill = (text, klass = "") => `<span class="pill ${klass} helpable" ${helpAttrs(text, "Small dashboard status badge.")}><span class="dot"></span>${esc(text)}</span>`;
+    const eventCard = (title, detail, meta = "", klass = "", help = "") => `<div class="event ${klass} helpable" ${helpAttrs(title, help || `${detail} ${meta}`)}><strong>${esc(title)}</strong><div class="subtle">${esc(detail)}</div><div class="mono subtle">${esc(meta)}</div></div>`;
+
+    document.querySelectorAll("nav button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("nav button").forEach((item) => item.classList.remove("active"));
+        document.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        q(button.dataset.tab).classList.add("active");
+      });
+    });
+
+    q("pauseBtn").addEventListener("click", () => {
+      paused = !paused;
+      q("pauseBtn").textContent = paused ? "Resume Dashboard" : "Pause Dashboard";
+      if (!paused) connectWebSocket();
+    });
+    q("refreshBtn").addEventListener("click", () => load());
+    q("reconnectBtn").addEventListener("click", () => connectWebSocket());
+    q("runShadowBtn").addEventListener("click", async () => {
+      q("runShadowBtn").disabled = true;
+      q("runShadowBtn").textContent = "Running...";
+      try {
+        await fetch("/shadow/run-cycle", { method: "POST" });
+        await load();
+      } finally {
+        q("runShadowBtn").disabled = false;
+        q("runShadowBtn").textContent = "Run Shadow Cycle";
+      }
+    });
+    q("sendEmailBtn").addEventListener("click", async () => {
+      q("sendEmailBtn").disabled = true;
+      try {
+        await fetch("/alerts/daily-summary/email", { method: "POST" });
+        await load();
+      } finally {
+        q("sendEmailBtn").disabled = false;
+      }
+    });
+
+    async function load() {
+      const data = await fetch("/dashboard/data", { cache: "no-store" }).then((response) => response.json());
+      latestData = data;
+      render(data);
+    }
+
+    function connectWebSocket() {
+      if (paused) return;
+      clearInterval(fallbackTimer);
+      if (socket) socket.close();
+      q("streamStatus").className = "pill warn";
+      q("streamStatus").innerHTML = '<span class="dot"></span> Connecting';
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${window.location.host}/dashboard/ws`);
+      socket.onopen = () => {
+        transport = "websocket";
+        q("streamStatus").className = "pill good";
+        q("streamStatus").innerHTML = '<span class="dot"></span> Live';
+      };
+      socket.onmessage = (event) => {
+        if (paused) return;
+        const payload = JSON.parse(event.data);
+        if (payload.type === "snapshot") {
+          messageCount += 1;
+          latestData = payload.data;
+          render(payload.data);
+        }
+      };
+      socket.onerror = () => startFallback();
+      socket.onclose = () => startFallback();
+    }
+
+    function startFallback() {
+      if (paused) return;
+      transport = "polling";
+      q("streamStatus").className = "pill warn";
+      q("streamStatus").innerHTML = '<span class="dot"></span> Polling';
+      clearInterval(fallbackTimer);
+      fallbackTimer = setInterval(load, 15000);
+      load();
+    }
+
+    function totalOrders(data) {
+      return Object.values(data.orders || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+    }
+
+    function observations(data) {
+      return data.shadow?.recent_observations || [];
+    }
+
+    function assessment(item) {
+      return item.assessment || {};
+    }
+
+    function exitDecision(item) {
+      return item.exit_decision || {};
+    }
+
+    function pnlRowClass(value) {
+      const parsed = Number(value || 0);
+      if (parsed > 0) return "row-profit";
+      if (parsed < 0) return "row-loss";
+      return "row-flat";
+    }
+
+    function directionBadge(value) {
+      const parsed = Number(value || 0);
+      if (parsed > 0) return '<span class="direction up">Up</span>';
+      if (parsed < 0) return '<span class="direction down">Down</span>';
+      return '<span class="direction flat">Flat</span>';
+    }
+
+    function render(data) {
+      renderHeader(data);
+      renderDesk(data);
+      renderJournal(data);
+      renderPnl(data);
+      renderStocks(data);
+      renderIntraday(data);
+      renderAgents(data);
+      renderDaily(data);
+      renderTraining(data);
+      renderSafety(data);
+      applyStaticHelp();
+    }
+
+    function renderHeader(data) {
+      const system = data.system || {};
+      q("modePill").className = "pill accent";
+      q("modePill").innerHTML = `<span class="dot"></span>${esc(system.trading_mode || "-")}`;
+      q("killPill").className = system.kill_switch ? "pill good" : "pill bad";
+      q("killPill").innerHTML = `<span class="dot"></span>Kill ${system.kill_switch ? "ON" : "OFF"}`;
+      setHelp(q("modePill"), "Trading mode", system.trading_mode || "Current dashboard mode.");
+      setHelp(q("killPill"), "Kill switch", system.kill_switch ? "Live orders are blocked." : "Warning: kill switch is off.");
+    }
+
+    function applyStaticHelp() {
+      document.querySelectorAll(".panel, .market-box, .band").forEach((element) => {
+        if (element.hasAttribute("title")) return;
+        const heading = element.querySelector(":scope > h2, :scope > .label")?.textContent?.trim();
+        if (!heading) return;
+        const text = helpFor(heading);
+        element.setAttribute("title", text);
+        element.setAttribute("data-help", text);
+      });
+    }
+
+    function renderDesk(data) {
+      const system = data.system || {};
+      const bot = data.bot_activity || {};
+      const shadow = data.shadow || {};
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      const orders = totalOrders(data);
+      const live = liveSessionState(data);
+      const liveRows = live.rows;
+      const totalUsed = sumRows(liveRows, "hypothetical_notional_inr");
+      const totalPnl = sumRows(liveRows, "hypothetical_pnl_inr");
+      const totalPnlPct = totalUsed > 0 ? totalPnl / totalUsed : 0;
+      const winners = liveRows.filter((item) => Number(item.hypothetical_pnl_inr || 0) > 0).length;
+      const losers = liveRows.filter((item) => Number(item.hypothetical_pnl_inr || 0) < 0).length;
+      const flat = Math.max(liveRows.length - winners - losers, 0);
+      q("deskHeadline").textContent = liveRows.length
+        ? `${liveRows.length} fresh live shadow rows, ${fmtInr(totalPnl)} open-session result.`
+        : "No live market rows right now. Markets are closed or fresh provider data has not arrived.";
+      q("deskDetail").textContent = [
+        bot.current_action || "The bot is watching real market data and saving shadow observations.",
+        live.anyOpen
+          ? "At least one market appears open, but only fresh rows are shown here."
+          : "All displayed P&L history is hidden from this live desk while markets are closed.",
+        "Shadow means learning mode only. No Zerodha or Alpaca order has been placed.",
+      ].join(" ");
+      q("deskPills").innerHTML = [
+        pill(`${liveRows.length} fresh live rows`, liveRows.length ? "good" : "warn"),
+        pill(live.indiaOpen ? "India open" : "India closed/waiting", live.indiaOpen ? "good" : "warn"),
+        pill(live.usOpen ? "US open" : "US closed/waiting", live.usOpen ? "good" : "warn"),
+        pill(`${fmtInr(totalUsed)} live shadow used`, liveRows.length ? "accent" : "warn"),
+        pill(`${winners} up / ${losers} down / ${flat} flat`, losers ? "warn" : "good"),
+        pill(system.live_trading_enabled ? "Live flag enabled" : "Live orders disabled", system.live_trading_enabled ? "bad" : "good"),
+        pill(system.kill_switch ? "Kill switch ON" : "Kill switch OFF", system.kill_switch ? "good" : "bad"),
+        pill(`${transport} ${messageCount ? messageCount + " updates" : ""}`.trim(), "accent"),
+      ].join("");
+      q("missionStats").innerHTML = missionStats(data, liveRows, totalUsed, totalPnl, totalPnlPct, winners, losers, flat);
+      q("simpleSafetyRows").innerHTML = [
+        row("Real broker orders placed", orders),
+        row("Live trading", system.live_trading_enabled ? "enabled" : "disabled"),
+        row("Kill switch", system.kill_switch ? "on" : "off"),
+        row("Mode", system.trading_mode || "-"),
+        row("Live desk window", liveRows.length ? "fresh current-session rows" : "empty until fresh open-market data"),
+        row("Historical data", "Profit / Loss tab only"),
+        row("Model status", model.status || "learning only"),
+      ].join("");
+      q("notionalExplain").innerHTML = allocationExplanation(data, liveRows, live);
+      q("todayPickRows").innerHTML = todaysPickRows(liveRows);
+      q("learningRows").innerHTML = learningCards(data, liveRows, totalUsed, totalPnl, totalPnlPct, winners, losers, flat);
+      q("frontAgentConsensus").innerHTML = frontAgentConsensus(data);
+      q("simpleIntradayRows").innerHTML = simpleIntradayRows(liveRows);
+      renderProfitProtection(data, liveRows);
+      q("frontIndiaSimple").innerHTML = plainMarketSummary(data.markets?.INDIA, liveRows.filter((item) => item.market === "INDIA"), live.indiaOpen);
+      q("frontUSSimple").innerHTML = plainMarketSummary(data.markets?.US, liveRows.filter((item) => item.market === "US"), live.usOpen);
+      setHelp(q("notionalExplain"), liveRows.length ? "Why this INR amount?" : "Why no INR amount yet?", liveRows.length ? "Shows why shadow money may be lower than the per-stock budget." : "Live desk hides old rows until fresh market data arrives.");
+      q("bestWorstRows").innerHTML = bestWorstCards(data, liveRows);
+      q("improvementRows").innerHTML = improvementPlanRows(data);
+      q("outcomeRows").innerHTML = liveRows.length
+        ? outcomeCards(data)
+        : eventCard("No live outcome yet", "Outcome review is historical and is available in the day-wise tabs after a session has data.", "live desk is empty", "warn");
+      q("exitDecisionRows").innerHTML = exitDecisionRows(data, liveRows);
+      q("trainingProgressRows").innerHTML = trainingProgressRows(data);
+      q("featureLearningRows").innerHTML = featureLearningCards(data);
+    }
+
+    function liveSessionState(data) {
+      const indiaOpen = marketOpenInLatestCycle(data, "INDIA");
+      const usOpen = marketOpenInLatestCycle(data, "US");
+      const freshnessSeconds = liveFreshnessSeconds(data);
+      const rows = observations(data).filter((item) => {
+        const marketOpen = item.market === "INDIA" ? indiaOpen : usOpen;
+        if (!marketOpen) return false;
+        if (marketLocalDate(item.last_marked_at, item.market) !== marketLocalDate(data.generated_at, item.market)) return false;
+        return secondsBetween(item.last_marked_at, data.generated_at) <= freshnessSeconds;
+      });
+      return {
+        rows,
+        indiaOpen,
+        usOpen,
+        anyOpen: indiaOpen || usOpen,
+        freshnessSeconds,
+      };
+    }
+
+    function marketOpenInLatestCycle(data, market) {
+      const key = market === "US" ? "us" : "india";
+      const cycle = data.bot_activity?.last_cycle?.[key] || {};
+      const observed = Number(cycle.observed || 0);
+      const blocked = Array.isArray(cycle.blocked) ? cycle.blocked : [];
+      return observed > 0 && !blocked.some((item) => String(item).includes("market_not_open"));
+    }
+
+    function liveFreshnessSeconds(data) {
+      return Math.max(300, Number(data.training?.current_loop_interval_seconds || 60) * 5);
+    }
+
+    function secondsBetween(value, nowValue) {
+      const date = new Date(value);
+      const now = new Date(nowValue || new Date().toISOString());
+      if (Number.isNaN(date.getTime()) || Number.isNaN(now.getTime())) return Number.POSITIVE_INFINITY;
+      return Math.abs(now.getTime() - date.getTime()) / 1000;
+    }
+
+    function latestSessionDate(data) {
+      return data.day_wise_pnl?.latest_day?.review_date
+        || data.daily_review?.history?.[0]?.review_date
+        || marketLocalDate(data.generated_at || new Date().toISOString(), "INDIA");
+    }
+
+    function dayLabel(reviewDate, data, index) {
+      const diff = dayDiffFromIndiaToday(reviewDate, data);
+      if (diff === 0) return "Today";
+      if (diff === 1) return "Yesterday";
+      if (diff === 2) return "Day before yesterday";
+      if (diff > 2) return `${diff} days back`;
+      if (index === 0) return "Latest completed session";
+      if (index === 1) return "Previous session";
+      if (index === 2) return "2 sessions back";
+      return `${index + 1} sessions back`;
+    }
+
+    function dayDiffFromIndiaToday(reviewDate, data) {
+      const today = marketLocalDate(data.generated_at || new Date().toISOString(), "INDIA");
+      const todayDate = parseDateOnly(today);
+      const rowDate = parseDateOnly(reviewDate);
+      if (!todayDate || !rowDate) return null;
+      return Math.round((todayDate.getTime() - rowDate.getTime()) / 86400000);
+    }
+
+    function parseDateOnly(value) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+      if (!match) return null;
+      return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    }
+
+    function marketLocalDate(value, market) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const timezone = market === "US" ? "America/New_York" : "Asia/Kolkata";
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date).reduce((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+      }, {});
+      return `${parts.year}-${parts.month}-${parts.day}`;
+    }
+
+    function anyMarketOpen(data) {
+      const cycle = data.bot_activity?.last_cycle || {};
+      return ["india", "us"].some((key) => {
+        const blocked = Array.isArray(cycle[key]?.blocked) ? cycle[key].blocked : [];
+        const observed = Number(cycle[key]?.observed || 0);
+        return observed > 0 && !blocked.some((item) => String(item).includes("market_not_open"));
+      });
+    }
+
+    function sumRows(rows, key) {
+      return rows.reduce((total, item) => total + Number(item[key] || 0), 0);
+    }
+
+    function missionStats(data, rows, totalUsed, totalPnl, totalPnlPct, winners, losers, flat) {
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      const trained = Number(model.trainable_samples || 0);
+      const required = Number(model.min_total_samples_required || 100000);
+      const progress = required > 0 ? trained / required : 0;
+      const stopCoverage = Number(model.stop_loss_coverage || 0);
+      const orders = totalOrders(data);
+      const perStock = Number((data.shadow || {}).hypothesis_notional_per_symbol_inr || 0);
+      const bookedPnl = Number((data.shadow || {}).booked_shadow_pnl_inr || 0);
+      const bookedCount = Number((data.shadow || {}).closed_shadow_exits_today || 0);
+      const configuredSymbols = Number(data.markets?.INDIA?.configured_symbol_count || 0) + Number(data.markets?.US?.configured_symbol_count || 0);
+      const fullCycleTarget = perStock * configuredSymbols;
+      return [
+        statCard("Real money used", fmtInr(0), `${orders} broker orders`, orders ? "bad" : "good"),
+        statCard("Live shadow tested", fmtInr(totalUsed), `${rows.length} fresh current-session rows`, rows.length ? "accent" : "warn"),
+        statCard("Per-stock shadow budget", fmtInr(perStock), `${configuredSymbols} symbols in research list`, "accent"),
+        statCard("Full-cycle target", fmtInr(fullCycleTarget), "shadow-only research exposure", "accent"),
+        statCard("Live session P&L", fmtInr(totalPnl), rows.length ? pct(totalPnlPct) : "waiting for open-market data", totalPnl >= 0 ? "good" : "bad"),
+        statCard("Booked shadow P&L", fmtInr(bookedPnl), `${bookedCount} exits frozen today; history is in Profit / Loss`, pnlClass(bookedPnl)),
+        statCard("Up / down / flat", `${winners}/${losers}/${flat}`, "down rows are red", losers ? "warn" : "good"),
+        statCard("Training samples", `${trained}/${required}`, `${pct(progress)} complete`, progress >= 1 ? "good" : "warn"),
+        statCard("Stop-loss coverage", pct(stopCoverage), "must stay near 100%", stopCoverage >= 0.95 ? "good" : "bad"),
+      ].join("");
+    }
+
+    function statCard(label, value, detail, klass = "") {
+      return `<div class="stat helpable" ${helpAttrs(label, detail)}><div class="label">${esc(label)}</div><div class="big-number ${klass}">${esc(value)}</div><div class="subtle">${esc(detail)}</div></div>`;
+    }
+
+    function allocationExplanation(data, rows, live) {
+      const shadow = data.shadow || {};
+      const perStock = Number(shadow.hypothesis_notional_per_symbol_inr || 0);
+      const intended = rows.length * perStock;
+      const used = sumRows(rows, "hypothetical_notional_inr");
+      const usZero = rows.some((item) => item.market === "US" && Number(item.hypothetical_quantity || 0) <= 0);
+      const details = rows.length
+        ? `The bot tries roughly ${fmtInr(perStock)} per stock. It can only use whole shares in this shadow ledger, so the total can be lower than ${fmtInr(intended)}. The current live-session shadow-used amount is ${fmtInr(used)}.`
+        : live?.anyOpen
+          ? `At least one market appears open, but no fresh rows passed the live freshness filter yet. This prevents stale data from looking current.`
+          : `Markets are closed or waiting, so this live desk intentionally shows no old shadow allocation. Check Profit / Loss for yesterday and older sessions.`;
+      const usNote = usZero ? " Some US symbols may show zero quantity when the INR test budget is too small after USD/INR conversion." : "";
+      return `<strong>${esc(rows.length ? "Why this INR amount?" : "Why no INR amount yet?")}</strong><div class="subtle">${esc(details + usNote)} This is not real money and not a broker order.</div>`;
+    }
+
+    function todaysPickRows(rows) {
+      if (!rows.length) return emptyRow(10, "No live shadow rows right now. This table will fill only when a market is open and fresh real provider data arrives.");
+      return rows.map((item) => {
+        const a = assessment(item);
+        const exit = exitDecision(item);
+        const read = plainSignalRead(item);
+        return `<tr class="${pnlRowClass(item.hypothetical_pnl_inr)}">
+          <td>${esc(item.market)}</td>
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td>${num.format(item.entry_price || 0)}<div class="subtle">shadow buy</div></td>
+          <td>${num.format(item.current_price || 0)}<div class="subtle">latest mark</div></td>
+          <td>${fmtInr(item.hypothetical_notional_inr || 0)}<div class="subtle">qty ${item.hypothetical_quantity || 0}</div></td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}"><strong>${fmtInr(item.hypothetical_pnl_inr || 0)}</strong><div class="subtle">${directionBadge(item.hypothetical_pnl_inr)} ${pct(item.hypothetical_pnl_pct || 0)}</div></td>
+          <td class="bad">${num.format(a.stop_loss || 0)}</td>
+          <td class="good">${num.format(a.take_profit || 0)}</td>
+          <td><strong>${esc(exit.label || "Observe")}</strong><div class="subtle">${esc(item.status || exit.urgency || "LOW")}</div></td>
+          <td>${esc(read)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function learningCards(data, rows, totalUsed, totalPnl, totalPnlPct, winners, losers, flat) {
+      const cards = [];
+      const orders = totalOrders(data);
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      cards.push(rows.length
+        ? eventCard("Live session result", `${fmtInr(totalPnl)} (${pct(totalPnlPct)}) on ${fmtInr(totalUsed)} shadow money.`, `${winners} up, ${losers} down, ${flat} flat`, totalPnl >= 0 ? "good" : "warn")
+        : eventCard("No live result", "The live desk is empty because no open market has fresh rows right now.", "history is in Profit / Loss", "warn"));
+      cards.push(eventCard("Sample size", `${model.trainable_samples || 0}/${model.min_total_samples_required || 100000} trainable samples collected. The target is deliberately high so we learn across many sessions.`, "more data needed", "warn"));
+      const indiaRows = rows.filter((item) => item.market === "INDIA").length;
+      const usRows = rows.filter((item) => item.market === "US").length;
+      cards.push(eventCard("India vs US", `India live rows: ${indiaRows}. US live rows: ${usRows}.`, rows.length ? "fresh open-session data only" : "both markets currently have no live rows", rows.length ? "accent" : "warn"));
+      const common = commonLearning(rows);
+      if (common) cards.push(eventCard("Main lesson", common, "risk filter", "accent"));
+      cards.push(eventCard("Real money safety", `${orders} real broker orders. Live trading remains blocked.`, "shadow mode", orders ? "bad" : "good"));
+      return cards.join("");
+    }
+
+    function commonLearning(rows) {
+      const flagCounts = {};
+      rows.forEach((item) => {
+        (assessment(item).risk_flags || []).forEach((flag) => {
+          flagCounts[flag] = (flagCounts[flag] || 0) + 1;
+        });
+      });
+      const topFlag = Object.entries(flagCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (!topFlag) return rows.length ? "Enough clean data is being collected; keep observing before changing rules." : "No lesson yet because the selected market-session rows have not started.";
+      return flagToPlainText(topFlag);
+    }
+
+    function plainSignalRead(item) {
+      const pnl = Number(item.hypothetical_pnl_inr || 0);
+      const flags = assessment(item).risk_flags || [];
+      if (pnl > 0) return "Currently helping the shadow book.";
+      if (pnl < 0 && flags.length) return flagToPlainText(flags[0]);
+      if (pnl < 0) return "Currently down; stop loss protects the idea.";
+      return "Flat so far; keep observing.";
+    }
+
+    function flagToPlainText(flag) {
+      const messages = {
+        observation_only_no_order_intent: "Learning only; no order should be placed.",
+        price_not_above_session_open: "Price is below the session opening price.",
+        price_not_above_prior_close: "Price has not beaten yesterday's close.",
+        price_below_average_traded_price: "Price is weaker than the session average traded price.",
+        session_range_outside_risk_band: "Price movement is too quiet or too wild.",
+        adverse_gap_too_large: "Opening gap risk is too high.",
+        stale_fx_rate: "USD/INR data is stale, so US trades are blocked.",
+        market_closed: "Market is closed, so live orders are blocked.",
+      };
+      return messages[flag] || flag.replaceAll("_", " ");
+    }
+
+    function simpleIntradayRows(rows) {
+      if (!rows.length) return emptyRow(11, "No intraday rows for the selected market session yet. Intraday learning starts when fresh market data arrives.");
+      return rows.map((item) => {
+        const a = assessment(item);
+        const exit = exitDecision(item);
+        return `<tr class="${pnlRowClass(item.hypothetical_pnl_inr)}">
+          <td>${esc(item.market)}</td>
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td>${esc(a.action || "WATCH")}</td>
+          <td>${num.format(item.entry_price || 0)}</td>
+          <td>${num.format(item.current_price || 0)}</td>
+          <td class="bad">${num.format(a.stop_loss || 0)}</td>
+          <td class="good">${num.format(a.take_profit || 0)}</td>
+          <td>${num.format(a.reward_risk_ratio || 0)}x</td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}">${fmtInr(item.hypothetical_pnl_inr || 0)}</td>
+          <td><strong>${esc(exit.label || "Observe")}</strong><div class="subtle">${esc(exit.reason || "")}</div></td>
+          <td>${esc(plainSignalRead(item))}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function plainMarketSummary(market, rows, isOpen) {
+      market = market || {};
+      const used = sumRows(rows, "hypothetical_notional_inr");
+      const pnl = sumRows(rows, "hypothetical_pnl_inr");
+      return [
+        row("Market state", isOpen ? "open with fresh-data filter" : "closed / waiting"),
+        row("Live rows now", rows.length),
+        row("Live shadow amount", fmtInr(used)),
+        row("Live result so far", fmtInr(pnl)),
+        row("Up / down / flat", `${rows.filter((item) => Number(item.hypothetical_pnl_inr || 0) > 0).length} / ${rows.filter((item) => Number(item.hypothetical_pnl_inr || 0) < 0).length} / ${rows.filter((item) => Number(item.hypothetical_pnl_inr || 0) === 0).length}`),
+        row("Configured stock list", `${market.configured_symbol_count || 0} symbols`),
+        row("Last historical mark", market.latest_marked_at ? shortTime(market.latest_marked_at) : "-"),
+        row("Plain meaning", rows.length ? "fresh rows are being tracked live" : "no current rows shown; use Profit / Loss for history"),
+      ].join("");
+    }
+
+    function renderPnl(data) {
+      const payload = data.day_wise_pnl || {};
+      const days = payload.days || [];
+      const latest = payload.latest_day || days[0] || null;
+      const summary = payload.summary || {};
+      q("pnlHeadline").textContent = latest
+        ? `${dayLabel(latest.review_date, data, 0)}: ${fmtInr(latest.hypothetical_pnl_inr || 0)} shadow P&L across ${latest.shadow_invested_count || 0} stocks.`
+        : "No day-wise shadow P&L yet.";
+      q("pnlDetail").textContent = `${summary.plain_english || "This is shadow P&L only, not broker-realized profit."} This tab is where yesterday, day before yesterday, and older market sessions belong.`;
+      q("pnlStats").innerHTML = pnlStats(summary, latest, data);
+      q("dayPnlCards").innerHTML = dayPnlCards(days, data);
+      q("dayPnlRows").innerHTML = dayPnlRows(days, data);
+      q("dayPnlHighlights").innerHTML = dayPnlHighlights(latest);
+      q("latestDayStockRows").innerHTML = latestDayStockRows(latest);
+    }
+
+    function pnlStats(summary, latest, data) {
+      return [
+        statCard("Days tracked", summary.days_with_samples || 0, `${summary.total_shadow_invested_count || 0} stock-days`, "accent"),
+        statCard("Latest completed P&L", fmtInr(latest?.hypothetical_pnl_inr || 0), latest ? dayLabel(latest.review_date, data, 0) : "-", pnlClass(latest?.hypothetical_pnl_inr || 0)),
+        statCard("Latest stocks tested", latest?.shadow_invested_count || 0, `${latest?.winners || 0} up, ${latest?.losers || 0} down`, latest?.losers ? "warn" : "good"),
+        statCard("Total shadow amount", fmtInr(summary.total_hypothetical_notional_inr || 0), "all days shown", "accent"),
+        statCard("Total shadow P&L", fmtInr(summary.total_hypothetical_pnl_inr || 0), "hypothetical only", pnlClass(summary.total_hypothetical_pnl_inr || 0)),
+        statCard("Real orders", summary.real_orders || 0, "must stay zero in shadow", summary.real_orders ? "bad" : "good"),
+      ].join("");
+    }
+
+    function dayPnlCards(days, data) {
+      if (!days.length) return eventCard("No history yet", "Run shadow cycles during market hours to build day-wise P&L.", "", "warn");
+      return days.slice(0, 9).map((day, index) => {
+        const klass = pnlClass(day.hypothetical_pnl_inr);
+        const india = day.markets?.INDIA;
+        const us = day.markets?.US;
+        return `<div class="day-card ${klass} helpable" ${helpAttrs(dayLabel(day.review_date, data, index), `${fmtInr(day.hypothetical_pnl_inr || 0)} shadow P&L across ${day.shadow_invested_count || 0} stocks.`)}>
+          <div style="display:flex; justify-content:space-between; gap:8px; align-items:start">
+            <div><strong>${esc(dayLabel(day.review_date, data, index))}</strong><div class="subtle">${esc(day.review_date)} | ${esc(day.status || "SHADOW")}</div></div>
+            ${directionBadge(day.hypothetical_pnl_inr)}
+          </div>
+          <div class="big-number ${klass}">${fmtInr(day.hypothetical_pnl_inr || 0)}</div>
+          <div class="subtle">${day.shadow_invested_count || 0} stocks tested | ${fmtInr(day.hypothetical_notional_inr || 0)} shadow amount</div>
+          <div class="row"><span class="subtle">Up / Down / Flat</span><strong>${day.winners || 0}/${day.losers || 0}/${day.flat || 0}</strong></div>
+          <div class="row"><span class="subtle">India</span><strong class="${pnlClass(india?.hypothetical_pnl_inr || 0)}">${india ? fmtInr(india.hypothetical_pnl_inr || 0) : "-"}</strong></div>
+          <div class="row"><span class="subtle">US</span><strong class="${pnlClass(us?.hypothetical_pnl_inr || 0)}">${us ? fmtInr(us.hypothetical_pnl_inr || 0) : "-"}</strong></div>
+        </div>`;
+      }).join("");
+    }
+
+    function dayPnlRows(days, data) {
+      if (!days.length) return emptyRow(7, "No day-wise P&L history yet.");
+      return days.map((day, index) => {
+        const best = (day.good_stocks || [])[0];
+        const worst = (day.loss_stocks || [])[0];
+        return `<tr class="${pnlRowClass(day.hypothetical_pnl_inr)}">
+          <td><strong>${esc(dayLabel(day.review_date, data, index))}</strong><div class="subtle">${esc(day.review_date)}</div></td>
+          <td>${day.shadow_invested_count || 0}<div class="subtle">${day.symbols_studied_count || 0} studied</div></td>
+          <td>${fmtInr(day.hypothetical_notional_inr || 0)}</td>
+          <td class="${pnlClass(day.hypothetical_pnl_inr)}"><strong>${fmtInr(day.hypothetical_pnl_inr || 0)}</strong><div class="subtle">${directionBadge(day.hypothetical_pnl_inr)} ${pct(day.hypothetical_pnl_pct || 0)}</div></td>
+          <td>${day.winners || 0} / ${day.losers || 0} / ${day.flat || 0}</td>
+          <td class="good">${best ? `${esc(best.symbol)} ${fmtInr(best.hypothetical_pnl_inr || 0)}` : "-"}</td>
+          <td class="bad">${worst ? `${esc(worst.symbol)} ${fmtInr(worst.hypothetical_pnl_inr || 0)}` : "-"}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function dayPnlHighlights(day) {
+      if (!day) return eventCard("No highlights yet", "Day-wise highlights will appear after shadow samples are recorded.", "", "warn");
+      const good = (day.good_stocks || []).slice(0, 5);
+      const loss = (day.loss_stocks || []).slice(0, 5);
+      const cards = [
+        eventCard("Latest completed day", `${day.review_date}: ${fmtInr(day.hypothetical_pnl_inr || 0)} net shadow P&L.`, `${day.shadow_invested_count || 0} stocks tested`, pnlClass(day.hypothetical_pnl_inr)),
+        eventCard("Good stocks", good.length ? good.map((item) => `${item.symbol} ${fmtInr(item.hypothetical_pnl_inr || 0)}`).join(", ") : "No positive stocks yet.", "helped P&L", good.length ? "good" : "warn"),
+        eventCard("Loss stocks", loss.length ? loss.map((item) => `${item.symbol} ${fmtInr(item.hypothetical_pnl_inr || 0)}`).join(", ") : "No loss stocks yet.", "study these first", loss.length ? "bad" : "good"),
+        eventCard("Meaning", "Green means the shadow idea helped. Red means it hurt. This is learning data, not real cash P&L.", "shadow-only", "accent"),
+      ];
+      return cards.join("");
+    }
+
+    function latestDayStockRows(day) {
+      if (!day) return emptyRow(8, "No latest completed day stock rows yet.");
+      const rows = Object.values(day.markets || {}).flatMap((market) => market.stock_rows || []);
+      if (!rows.length) return emptyRow(8, "No stock rows for the latest completed day.");
+      return rows.sort((a, b) => Number(b.hypothetical_pnl_inr || 0) - Number(a.hypothetical_pnl_inr || 0)).map((item) => `<tr class="${pnlRowClass(item.hypothetical_pnl_inr)}">
+        <td>${esc(item.market || marketFromDay(day, item.symbol))}</td>
+        <td><strong>${esc(item.symbol)}</strong></td>
+        <td>${directionBadge(item.hypothetical_pnl_inr)}</td>
+        <td>${num.format(item.entry_price || 0)}</td>
+        <td>${num.format(item.current_price || 0)}</td>
+        <td>${item.hypothetical_quantity || 0}</td>
+        <td>${fmtInr(item.hypothetical_notional_inr || 0)}</td>
+        <td class="${pnlClass(item.hypothetical_pnl_inr)}"><strong>${fmtInr(item.hypothetical_pnl_inr || 0)}</strong><div class="subtle">${pct(item.hypothetical_pnl_pct || 0)}</div></td>
+      </tr>`).join("");
+    }
+
+    function marketFromDay(day, symbol) {
+      for (const [market, payload] of Object.entries(day.markets || {})) {
+        if ((payload.stock_rows || []).some((item) => item.symbol === symbol)) return market;
+      }
+      return "-";
+    }
+
+    function bestWorstCards(data, rows) {
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      const cards = [];
+      const best = [...rows].sort((a, b) => Number(b.hypothetical_pnl_inr || 0) - Number(a.hypothetical_pnl_inr || 0)).slice(0, 3);
+      const worst = [...rows].sort((a, b) => Number(a.hypothetical_pnl_inr || 0) - Number(b.hypothetical_pnl_inr || 0)).slice(0, 3);
+      if (best.length) cards.push(eventCard("Best live shadow ideas", best.map((item) => `${item.symbol} ${fmtInr(item.hypothetical_pnl_inr || 0)}`).join(", "), "current live session", "good"));
+      if (worst.length) cards.push(eventCard("Ideas to study", worst.map((item) => `${item.symbol} ${fmtInr(item.hypothetical_pnl_inr || 0)}`).join(", "), "review stop/entry rules", "warn"));
+      Object.entries(model.markets || {}).forEach(([market, value]) => {
+        cards.push(eventCard(`${market} training read`, `Win rate ${pct(value.win_rate || 0)}, avg reward/risk ${num.format(value.avg_reward_risk_ratio || 0)}x.`, `${value.trainable_samples || 0} samples`, value.hypothetical_pnl_inr >= 0 ? "accent" : "warn"));
+      });
+      return cards.join("") || eventCard("No best/worst yet", "Wait for market-session shadow rows.", "shadow ledger", "warn");
+    }
+
+    function outcomeCards(data) {
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      const outcome = model.outcome_summary || {};
+      const counts = outcome.counts || {};
+      return [
+        eventCard("Ideas reviewed", `${outcome.ideas || 0} intraday ideas grouped from timestamped samples.`, "one idea = one symbol per market day", "accent"),
+        eventCard("Target vs stop", `${counts.TARGET_TOUCHED || 0} target touches, ${counts.STOP_TOUCHED || 0} stop touches.`, `target ${pct(outcome.target_touch_rate || 0)}, stop ${pct(outcome.stop_touch_rate || 0)}`, (counts.STOP_TOUCHED || 0) ? "warn" : "good"),
+        eventCard("Time-exit result", `${counts.TIME_EXIT_POSITIVE || 0} positive, ${counts.TIME_EXIT_NEGATIVE || 0} negative, ${counts.TIME_EXIT_FLAT || 0} flat.`, "when target/stop did not touch", "accent"),
+        eventCard("Net idea P&L", fmtInr(outcome.net_hypothetical_pnl_inr || 0), "shadow-only, not realized profit", (outcome.net_hypothetical_pnl_inr || 0) >= 0 ? "good" : "bad"),
+      ].join("");
+    }
+
+    function renderProfitProtection(data, liveRows) {
+      if (!liveRows.length) {
+        q("profitProtectionStats").innerHTML = [
+          statCard("Peak live P&L", fmtInr(0), "no fresh open-session rows", "warn"),
+          statCard("Current live P&L", fmtInr(0), "waiting for market-hours data", "warn"),
+          statCard("Giveback from peak", fmtInr(0), "no live peak yet", "good"),
+          statCard("Protection status", 0, "no live alerts", "good"),
+        ].join("");
+        q("profitBookingStats").innerHTML = [
+          statCard("Profit booked live", fmtInr(0), "no current-session exits", "warn"),
+          statCard("Stop/protective exits", fmtInr(0), "no current-session exits", "good"),
+          statCard("Net booked result", fmtInr(0), "current live session only", "warn"),
+          statCard("Booking mode", "Shadow", "not broker execution", "accent"),
+        ].join("");
+        q("shouldLockProfitRows").innerHTML = eventCard("No live profit-lock alert", "Markets are closed or fresh rows are not available. Historical alerts are in Profit / Loss and Daily Review.", "live desk only", "good");
+        q("nearStopRows").innerHTML = eventCard("No live stop alert", "No current open-session row is near stop because no live rows are shown.", "live desk only", "good");
+        q("bookedProfitRows").innerHTML = eventCard("No live profit booked", "No profit-booking event has fired in the current live session.", "shadow only", "warn");
+        q("bookedLossRows").innerHTML = eventCard("No live stop/protective exit", "No stop/protective exit has fired in the current live session.", "shadow only", "good");
+        return;
+      }
+      const protection = data.profit_protection || {};
+      const protectionDay = protection.latest_day || latestSessionDate(data) || "latest session";
+      const current = Number(protection.current_total_pnl_inr || 0);
+      const peak = Number(protection.best_observed_total_pnl_inr || 0);
+      const giveback = Number(protection.giveback_from_best_observed_inr || 0);
+      q("profitProtectionStats").innerHTML = [
+        statCard("Peak session P&L", fmtInr(peak), `best shadow P&L for ${protectionDay}`, pnlClass(peak)),
+        statCard("Current session P&L", fmtInr(current), "latest shadow mark in that session", pnlClass(current)),
+        statCard("Giveback from peak", fmtInr(giveback), `${pct(protection.giveback_pct_of_best_observed || 0)} faded`, giveback > 0 ? "bad" : "good"),
+        statCard("Protection status", protection.alerts_count || 0, `${protection.high_urgency_count || 0} high urgency`, protection.high_urgency_count ? "bad" : (protection.alerts_count ? "warn" : "good")),
+      ].join("");
+      const booking = protection.shadow_profit_booking || {};
+      const bookingPolicy = protection.profit_booking_policy || {};
+      q("profitBookingStats").innerHTML = [
+        statCard("Profit booked", fmtInr(booking.booked_profit_pnl_inr || 0), `${booking.booked_profit_count || 0} shadow exits`, Number(booking.booked_profit_pnl_inr || 0) > 0 ? "good" : "warn"),
+        statCard("Stop/protective exits", fmtInr(booking.booked_loss_pnl_inr || 0), `${booking.booked_loss_count || 0} shadow exits`, pnlClass(booking.booked_loss_pnl_inr || 0)),
+        statCard("Net booked result", fmtInr(Number(booking.booked_profit_pnl_inr || 0) + Number(booking.booked_loss_pnl_inr || 0)), "profit-booking exits plus stop/protective exits", pnlClass(Number(booking.booked_profit_pnl_inr || 0) + Number(booking.booked_loss_pnl_inr || 0))),
+        statCard("Booking mode", "Shadow", "not broker execution", "accent"),
+        statCard("Booking trigger", `${pct(bookingPolicy.target_progress_pct || 0.5)} target path`, `min ${fmtInr(bookingPolicy.min_pnl_inr || 300)} or ${pct(bookingPolicy.min_pnl_pct || 0.003)}`, bookingPolicy.enabled === false ? "warn" : "good"),
+      ].join("");
+      const alerts = protection.alerts || [];
+      const lock = alerts.filter((item) => ["EXIT_PROFIT_BOOKING", "EXIT_PROFIT_GIVEBACK", "EXIT_TAKE_PROFIT", "PROTECT_PROFIT"].includes(item.recommended_shadow_exit)).slice(0, 5);
+      const nearStop = alerts.filter((item) => item.recommended_shadow_exit === "EXIT_STOP_LOSS" || item.recommended_shadow_exit === "WATCH_LOSER").slice(0, 5);
+      q("shouldLockProfitRows").innerHTML = lock.length
+        ? lock.map((item) => eventCard(`${item.market} ${item.symbol}`, `${item.label}: peak ${fmtInr(item.peak_pnl_inr)}, now ${fmtInr(item.current_pnl_inr)}, giveback ${fmtInr(item.giveback_inr)}.`, item.reason, item.urgency === "HIGH" ? "bad" : "warn")).join("")
+        : eventCard("No profit-lock alert", "No symbol currently needs a shadow profit-protection exit.", "shadow only", "good");
+      q("nearStopRows").innerHTML = nearStop.length
+        ? nearStop.map((item) => eventCard(`${item.market} ${item.symbol}`, `${item.label}: now ${fmtInr(item.current_pnl_inr)}.`, item.reason, "bad")).join("")
+        : eventCard("No stop alert", "No tracked symbol has fired a stop-loss alert in shadow data.", "shadow only", "good");
+      q("bookedProfitRows").innerHTML = (booking.booked_profit_rows || []).length
+        ? booking.booked_profit_rows.slice(0, 6).map((item) => eventCard(`${item.market} ${item.symbol}`, `Booked profit ${fmtInr(item.current_pnl_inr)} after peak ${fmtInr(item.peak_pnl_inr)}.`, item.reason, "good")).join("")
+        : eventCard("No profit booked yet", "No shadow exit has booked profit for the selected market session.", "profit booking", "warn");
+      q("bookedLossRows").innerHTML = (booking.booked_loss_rows || []).length
+        ? booking.booked_loss_rows.slice(0, 6).map((item) => eventCard(`${item.market} ${item.symbol}`, `Booked stop-loss ${fmtInr(item.current_pnl_inr)}.`, item.reason, "bad")).join("")
+        : eventCard("No stop-loss booked yet", "No shadow exit has booked a stop-loss for the selected market session.", "stop-loss booking", "good");
+    }
+
+    function protectionDecisionFor(data, item) {
+      const decisions = data.profit_protection?.decisions_today || [];
+      return decisions.find((decision) => decision.market === item.market && decision.symbol === item.symbol) || null;
+    }
+
+    function exitDecisionRows(data, rows) {
+      if (!rows.length) return emptyRow(9, "No active shadow rows for exit learning yet.");
+      return rows.slice(0, 30).map((item) => {
+        const exit = exitDecision(item);
+        const protection = protectionDecisionFor(data, item);
+        const protectionLabel = protection?.label || exit.label || "Observe";
+        const protectionAction = protection?.recommended_shadow_exit || exit.action || "WAIT_FOR_MOVE";
+        const reason = protection?.reason || exit.reason || "Keep observing until price reaches stop, target, or time exit.";
+        const reentry = protection?.reentry_plan || exit.reentry_plan || "Wait for a fresh qualified setup before considering the same stock again.";
+        return `<tr class="${pnlRowClass(item.hypothetical_pnl_inr)}">
+          <td>${esc(item.market)}</td>
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td>${num.format(item.current_price || 0)}</td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}">${fmtInr(item.hypothetical_pnl_inr || 0)} ${directionBadge(item.hypothetical_pnl_inr)}</td>
+          <td class="${pnlClass(protection?.peak_pnl_inr || item.hypothetical_pnl_inr)}">${fmtInr(protection?.peak_pnl_inr || item.hypothetical_pnl_inr || 0)}<div class="subtle">${protection?.peak_at ? shortTime(protection.peak_at) : "-"}</div></td>
+          <td class="${Number(protection?.giveback_inr || 0) > 0 ? "bad" : "good"}">${fmtInr(protection?.giveback_inr || 0)}<div class="subtle">${pct(protection?.giveback_pct_of_peak || 0)} of peak</div></td>
+          <td><strong>${esc(protectionLabel)}</strong><div class="subtle">${esc(protectionAction)}</div></td>
+          <td>${esc(reason)}</td>
+          <td>${esc(reentry)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function improvementPlanRows(data) {
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      const actions = (model.next_actions || data.bot_activity?.improvement_actions || []).slice(0, 5);
+      const base = [
+        "Collect real price data during market hours.",
+        "Attach stop loss and profit target to every idea.",
+        "Compare later P&L against the reason for each idea.",
+        "Promote only rules that survive enough samples after costs and slippage.",
+      ];
+      return [...base, ...actions].slice(0, 8).map((item) => `<div>${esc(item)}</div>`).join("");
+    }
+
+    function trainingProgressRows(data) {
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      const collection = (data.training || {}).sample_collection || {};
+      const trained = Number(model.trainable_samples || 0);
+      const required = Number(model.min_total_samples_required || 100000);
+      const pctDone = required > 0 ? trained / required : 0;
+      const india = model.markets?.INDIA || {};
+      const us = model.markets?.US || {};
+      return [
+        progressRow("Overall data collected", trained, required),
+        progressRow("India samples", Number(india.trainable_samples || 0), Number(model.min_samples_per_market_required || 25000)),
+        progressRow("US samples", Number(us.trainable_samples || 0), Number(model.min_samples_per_market_required || 25000)),
+        row("Current training status", model.status || "INSUFFICIENT_DATA"),
+        row("Live promotion", model.promotion_status || "LIVE_BLOCKED_BY_DESIGN"),
+        row("Capture mode", collection.mode || "TIMESTAMPED_INTRADAY_MARKS"),
+        row("Loop speed", `${data.training?.current_loop_interval_seconds || 60}s`),
+        row("Why it was slow", collection.why_previous_count_was_slow || "Older reports counted one row per symbol, not every intraday mark."),
+        row("Fast path estimate", collection.estimated_minutes_to_minimum_if_both_markets_open ? `${num.format(collection.estimated_minutes_to_minimum_if_both_markets_open)} minutes if both markets are open` : "-"),
+        row("Plain meaning", pctDone >= 1 ? "enough samples for review, not automatic live trading" : "still collecting data before trusting patterns"),
+        row("Why target is high", collection.long_run_target_reason || model.sample_goal?.plain_english || "A small sample can be lucky; a high sample target is safer."),
+      ].join("");
+    }
+
+    function progressRow(label, value, target) {
+      const ratio = target > 0 ? Math.max(0, Math.min(value / target, 1)) : 0;
+      return `<div class="progress-line helpable" ${helpAttrs(label, `${value}/${target} collected.`)}>
+        <strong><span>${esc(label)}</span><span>${esc(value + "/" + target)}</span></strong>
+        <div class="bar"><div style="width:${ratio * 100}%"></div></div>
+      </div>`;
+    }
+
+    function featureLearningCards(data) {
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      const features = [...(model.feature_diagnostics || [])]
+        .sort((a, b) => Math.abs(Number(b.correlation_to_pnl_pct || 0)) - Math.abs(Number(a.correlation_to_pnl_pct || 0)))
+        .slice(0, 4);
+      const cards = features.map((item) => {
+        const corr = Number(item.correlation_to_pnl_pct || 0);
+        const strength = Math.abs(corr) < 0.2 ? "weak clue" : "early clue";
+        const direction = corr >= 0 ? "helped P&L a little" : "hurt P&L a little";
+        return eventCard(prettyFeature(item.name), `${strength}: ${direction}. This is not trusted yet with only ${item.samples || 0} samples.`, `score ${corr.toFixed(3)}`, Math.abs(corr) >= 0.2 ? "accent" : "warn");
+      });
+      return cards.join("") || eventCard("No feature learning yet", "The model needs more shadow rows before feature clues are meaningful.", "training", "warn");
+    }
+
+    function prettyFeature(name) {
+      const labels = {
+        confidence: "Confidence score",
+        reward_risk_ratio: "Reward vs risk",
+        expected_risk_pct: "Risk distance",
+        expected_reward_pct: "Reward distance",
+        distance_to_stop_pct: "Distance to stop",
+        distance_to_target_pct: "Distance to target",
+      };
+      return labels[name] || String(name || "-").replaceAll("_", " ");
+    }
+
+    function renderJournal(data) {
+      const rows = observations(data);
+      const realOrders = data.recent_orders || [];
+      const shadowEntries = rows.filter((item) => Number(item.hypothetical_quantity || 0) > 0).length;
+      const shadowExits = rows.filter((item) => isShadowExit(item)).length;
+      const profitRows = rows.filter((item) => Number(item.hypothetical_pnl_inr || 0) > 0).length;
+      const lossRows = rows.filter((item) => Number(item.hypothetical_pnl_inr || 0) < 0).length;
+      const netPnl = sumRows(rows, "hypothetical_pnl_inr");
+      const realOrderCount = totalOrders(data);
+      q("journalHeadline").textContent = `${shadowEntries} shadow entries, ${shadowExits} shadow exits, ${realOrderCount} real broker orders.`;
+      q("journalDetail").textContent = "This is the simple ledger: what the bot watched, where it would buy, where it would sell or protect, and whether the row is in profit or loss.";
+      q("journalStats").innerHTML = [
+        statCard("Shadow buy entries", shadowEntries, "hypothetical only", "accent"),
+        statCard("Shadow sell/exits", shadowExits, "booked/protected rows", shadowExits ? "good" : "warn"),
+        statCard("Rows in profit", profitRows, "green rows helped", profitRows ? "good" : "warn"),
+        statCard("Rows in loss", lossRows, "red rows hurt", lossRows ? "bad" : "good"),
+        statCard("Recent net P&L", fmtInr(netPnl), "recent rows shown, shadow only", pnlClass(netPnl)),
+        statCard("Real broker orders", realOrderCount, "must stay zero in shadow", realOrderCount ? "bad" : "good"),
+      ].join("");
+      q("plainGuideRows").innerHTML = plainGuideRows(data);
+      q("tradeJournalRows").innerHTML = tradeJournalRows(rows);
+      q("realOrderJournalRows").innerHTML = realOrderRows(realOrders);
+    }
+
+    function plainGuideRows(data) {
+      const mode = data.system?.trading_mode || "SHADOW_LIVE_REAL_DATA";
+      return [
+        eventCard("Buy / entry", "The row started a hypothetical position at the entry price. No real Zerodha/Alpaca buy order was sent.", `mode=${mode}`, "accent"),
+        eventCard("Sell / exit", "The row is closed or should be closed in shadow learning when profit target, profit booking, giveback, or stop-loss logic fires.", "shadow exit only", "good"),
+        eventCard("Stop loss", "The safety price. If price reaches it, the idea is treated as wrong instead of hoping.", "loss control", "bad"),
+        eventCard("Profit target", "The preferred exit price for a gain. Profit booking may exit earlier when a good gain starts fading.", "profit protection", "good"),
+      ].join("");
+    }
+
+    function tradeJournalRows(rows) {
+      if (!rows.length) return emptyRow(12, "No shadow journal rows yet.");
+      return rows.slice(0, 100).map((item) => {
+        const a = assessment(item);
+        const step = journalStep(item);
+        return `<tr class="${pnlRowClass(item.hypothetical_pnl_inr)}">
+          <td>${shortTime(item.last_marked_at)}<div class="subtle">opened ${shortTime(item.opened_at)}</div></td>
+          <td>${esc(item.market)}</td>
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td><strong>${esc(step.label)}</strong><div class="subtle">${esc(step.detail)}</div></td>
+          <td>${num.format(item.entry_price || 0)}</td>
+          <td>${num.format(item.current_price || 0)}</td>
+          <td>${item.hypothetical_quantity || 0}</td>
+          <td>${fmtInr(item.hypothetical_notional_inr || 0)}</td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}"><strong>${fmtInr(item.hypothetical_pnl_inr || 0)}</strong><div class="subtle">${directionBadge(item.hypothetical_pnl_inr)} ${pct(item.hypothetical_pnl_pct || 0)}</div></td>
+          <td class="bad">${num.format(a.stop_loss || 0)}</td>
+          <td class="good">${num.format(a.take_profit || 0)}</td>
+          <td>${esc(journalReason(item))}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function realOrderRows(rows) {
+      if (!rows.length) return emptyRow(9, "No real broker orders found. This is correct for shadow mode.");
+      return rows.slice(0, 50).map((order) => `<tr class="${order.status === "FILLED" ? "row-profit" : "row-flat"}">
+        <td>${shortTime(order.created_at)}</td>
+        <td>${esc(order.market)}</td>
+        <td>${esc(order.broker)}</td>
+        <td><strong>${esc(order.symbol)}</strong></td>
+        <td>${esc(order.side)}</td>
+        <td>${order.quantity || 0}</td>
+        <td>${esc(order.order_type)}</td>
+        <td>${esc(order.status)}<div class="subtle">${esc(order.reconciliation_state || "")}</div></td>
+        <td>${esc(order.broker_order_id || "-")}</td>
+      </tr>`).join("");
+    }
+
+    function isShadowExit(item) {
+      return String(item.status || "").startsWith("CLOSED_SHADOW")
+        || String(exitDecision(item).action || "").startsWith("EXIT_");
+    }
+
+    function journalStep(item) {
+      const exit = exitDecision(item);
+      if (isShadowExit(item)) {
+        return {
+          label: "Shadow sell / exit",
+          detail: exit.label || item.status || "exit recorded",
+        };
+      }
+      if (Number(item.hypothetical_quantity || 0) <= 0) {
+        return {
+          label: "No buy size",
+          detail: "price was too high for the shadow budget or sizing blocked it",
+        };
+      }
+      return {
+        label: "Shadow buy / watch",
+        detail: "hypothetical entry is being monitored",
+      };
+    }
+
+    function journalReason(item) {
+      const exit = exitDecision(item);
+      if (exit.reason) return exit.reason;
+      const pnl = Number(item.hypothetical_pnl_inr || 0);
+      if (pnl > 0) return "This row is currently profitable in shadow.";
+      if (pnl < 0) return "This row is currently losing in shadow; stop-loss controls the damage.";
+      return plainSignalRead(item);
+    }
+
+    function tapeRows(rows, limit) {
+      if (!rows.length) return emptyRow(10, "No real-time shadow trades yet. Waiting for market-hours data.");
+      return rows.slice(0, limit).map((item) => {
+        const a = assessment(item);
+        return `<tr>
+          <td>${esc(item.market)}</td>
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td>${num.format(item.entry_price || 0)}</td>
+          <td>${num.format(item.current_price || 0)}</td>
+          <td class="bad">${num.format(a.stop_loss || 0)}</td>
+          <td class="good">${num.format(a.take_profit || 0)}</td>
+          <td>${num.format(a.reward_risk_ratio || 0)}</td>
+          <td>${item.hypothetical_quantity || 0}</td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}">${fmtInr(item.hypothetical_pnl_inr || 0)}</td>
+          <td>${shortTime(item.last_marked_at)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function frontAlerts(data) {
+      const items = [];
+      (data.recent_risk_events || []).slice(0, 4).forEach((item) => items.push(
+        eventCard(`Risk: ${item.event_type}`, item.message, shortTime(item.created_at), item.severity === "ERROR" ? "bad" : "warn")
+      ));
+      (data.bot_activity?.improvement_actions || []).slice(0, 3).forEach((item) => items.push(
+        eventCard("Improve next", item, "shadow review", "accent")
+      ));
+      return items.join("") || eventCard("Standing by", "No risk events or trade marks yet.", "", "warn");
+    }
+
+    function frontMarket(market, ready) {
+      market = market || {};
+      return [
+        row("Shadow ready now", ready ? "yes" : "no"),
+        row("Configured symbols", `${market.configured_symbol_count || 0}`),
+        row("Observed last cycle", market.observed_last_cycle || 0),
+        row("Active shadow trades", market.active_observations || 0),
+        row("Hyp. P&L", fmtInr(market.hypothetical_pnl_inr || 0)),
+        row("Win/Loss/Flat", `${market.winners || 0}/${market.losers || 0}/${market.flat || 0}`),
+      ].join("");
+    }
+
+    function renderStocks(data) {
+      const markets = data.markets || {};
+      q("indiaMarketCard").innerHTML = marketCard(markets.INDIA);
+      q("usMarketCard").innerHTML = marketCard(markets.US);
+      q("indiaSymbols").innerHTML = symbolPills(markets.INDIA?.configured_symbols || [], "teal");
+      q("usSymbols").innerHTML = symbolPills(markets.US?.configured_symbols || [], "violet");
+      const rows = observations(data);
+      q("indiaRows").innerHTML = bookRows(rows.filter((item) => item.market === "INDIA"), 7);
+      q("usRows").innerHTML = bookRows(rows.filter((item) => item.market === "US"), 7);
+    }
+
+    function symbolPills(symbols, klass) {
+      return symbols.length ? symbols.map((symbol) => pill(symbol, klass)).join("") : pill("No symbols configured", "warn");
+    }
+
+    function marketCard(market) {
+      market = market || {};
+      return [
+        row("Shadow ready", market.shadow_ready_now ? "yes" : "no"),
+        row("Observed last cycle", market.observed_last_cycle || 0),
+        row("Active observations", market.active_observations || 0),
+        row("Would-have P&L", fmtInr(market.hypothetical_pnl_inr || 0)),
+        row("Latest mark", market.latest_marked_at ? shortTime(market.latest_marked_at) : "-"),
+      ].join("");
+    }
+
+    function bookRows(rows, cols) {
+      if (!rows.length) return emptyRow(cols, "No shadow observations for this market yet.");
+      return rows.slice(0, 20).map((item) => {
+        const a = assessment(item);
+        return `<tr class="${pnlRowClass(item.hypothetical_pnl_inr)}">
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td>${num.format(item.entry_price || 0)}</td>
+          <td class="bad">${num.format(a.stop_loss || 0)}</td>
+          <td class="good">${num.format(a.take_profit || 0)}</td>
+          <td>${num.format(a.reward_risk_ratio || 0)}</td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}">${fmtInr(item.hypothetical_pnl_inr || 0)}</td>
+          <td>${shortTime(item.last_marked_at)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function renderIntraday(data) {
+      const model = (data.training || {}).intraday_model || data.model_training || {};
+      q("intradayControl").innerHTML = [
+        row("Mode", data.system?.trading_mode || "-"),
+        row("Loop interval", `${data.training?.current_loop_interval_seconds || 300}s`),
+        row("Model status", model.status || "WAITING_FOR_MARKET_DATA"),
+        row("Trainable samples", `${model.trainable_samples || 0}/${model.min_total_samples_required || 100000}`),
+        row("Stop-loss coverage", pct(model.stop_loss_coverage || 0)),
+        row("No order placement", model.no_order_placement === false ? "no" : "yes"),
+      ].join("");
+      q("intradayRiskPlan").innerHTML = (model.next_actions || data.training?.model_notes || [
+        "Collect market-hours samples before changing strategy rules.",
+        "Do not promote to live until stop-aware paper evidence is reviewed.",
+      ]).slice(0, 6).map((item) => eventCard("Risk action", item, model.status || "shadow only", "accent")).join("");
+      q("intradayRows").innerHTML = intradayRows(observations(data));
+    }
+
+    function intradayRows(rows) {
+      if (!rows.length) return emptyRow(13, "No intraday setups yet. Shadow mode is waiting for market-hours observations.");
+      return rows.slice(0, 30).map((item) => {
+        const a = assessment(item);
+        const exit = exitDecision(item);
+        return `<tr class="${pnlRowClass(item.hypothetical_pnl_inr)}">
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td>${esc(item.market)}</td>
+          <td>${esc(a.action || "NO_TRADE")}</td>
+          <td>${num.format(a.confidence || 0)}</td>
+          <td>${num.format(item.entry_price || 0)}</td>
+          <td>${num.format(item.current_price || 0)}</td>
+          <td class="bad">${num.format(a.stop_loss || 0)}</td>
+          <td class="good">${num.format(a.take_profit || 0)}</td>
+          <td>${num.format(a.expected_risk || 0)}</td>
+          <td>${num.format(a.expected_reward || 0)}</td>
+          <td>${num.format(a.reward_risk_ratio || 0)}</td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}">${fmtInr(item.hypothetical_pnl_inr || 0)}</td>
+          <td><strong>${esc(exit.label || "Observe")}</strong><div class="subtle">${esc(exit.urgency || "LOW")}</div></td>
+        </tr>`;
+      }).join("");
+    }
+
+    function intelligence(data) {
+      return data.market_intelligence || {};
+    }
+
+    function intelligenceAgents(data) {
+      return intelligence(data).agents || [];
+    }
+
+    function agentClass(status) {
+      if (status === "OK") return "good";
+      if (status === "BLOCKED" || status === "UNAVAILABLE") return "bad";
+      if (status === "WARN" || status === "CAUTION") return "warn";
+      return "accent";
+    }
+
+    function frontAgentConsensus(data) {
+      const intel = intelligence(data);
+      const consensus = intel.agent_consensus || {};
+      const agents = intelligenceAgents(data);
+      const cautions = consensus.blockers_or_cautions || [];
+      const actions = consensus.top_actions || [];
+      return [
+        eventCard(
+          `Consensus: ${consensus.status || "WAITING"}`,
+          consensus.summary || "Market-intelligence agents are waiting for a dashboard snapshot.",
+          `${agents.length || 0} agents | orders_placed=${intel.orders_placed || 0}`,
+          agentClass(consensus.status)
+        ),
+        eventCard(
+          "Top caution",
+          cautions[0] || "No major caution from agent consensus yet.",
+          "shadow-only agent output",
+          cautions.length ? "warn" : "good"
+        ),
+        eventCard(
+          "Next improvement",
+          actions[0] || "Keep collecting real market-hours shadow observations.",
+          "No order placement",
+          "accent"
+        ),
+      ].join("");
+    }
+
+    function renderAgents(data) {
+      const intel = intelligence(data);
+      const consensus = intel.agent_consensus || {};
+      const agents = intelligenceAgents(data);
+      const news = agents.find((agent) => agent.agent_name === "NewsSentimentAgent") || {};
+      q("agentHeadline").textContent = `${agents.length || 0} shadow-only agents running. Consensus: ${consensus.status || "WAITING"}.`;
+      q("agentDetail").textContent = intel.plain_english || "Agents explain the market data and risk posture. They cannot place orders.";
+      q("agentPills").innerHTML = [
+        pill(`orders_placed=${intel.orders_placed || 0}`, (intel.orders_placed || 0) ? "bad" : "good"),
+        pill(intel.shadow_only === false ? "not shadow-only" : "shadow-only", intel.shadow_only === false ? "bad" : "good"),
+        pill(intel.no_order_placement === false ? "order path present" : "No order placement", intel.no_order_placement === false ? "bad" : "good"),
+        pill(consensus.status || "WAITING", agentClass(consensus.status)),
+        pill("Analysis Agents", "accent"),
+      ].join("");
+      q("agentConsensusRows").innerHTML = [
+        eventCard("Consensus summary", consensus.summary || "Waiting for agent output.", intel.sample_policy || "", agentClass(consensus.status)),
+        eventCard("Cautions", (consensus.blockers_or_cautions || []).slice(0, 4).join(" | ") || "No major caution yet.", "agent consensus", (consensus.blockers_or_cautions || []).length ? "warn" : "good"),
+        eventCard("Next actions", (consensus.top_actions || []).slice(0, 4).join(" | ") || "Keep collecting real shadow data.", "daily/session review", "accent"),
+      ].join("");
+      q("newsSentimentRows").innerHTML = [
+        eventCard(news.agent_name || "NewsSentimentAgent", news.summary || "No news/sentiment agent output yet.", `status=${news.status || "WAITING"}`, agentClass(news.status)),
+        eventCard("Freshness", (news.findings || []).join(" | ") || "Fresh headline count unavailable.", "sentiment cannot create BUY", news.status === "OK" ? "good" : "warn"),
+        eventCard("Caution rule", (news.recommended_actions || ["Use news only to reduce risk, not to increase trading."])[0], "caution-only", "accent"),
+      ].join("");
+      q("agentCards").innerHTML = agents.length
+        ? agents.map((agent) => `<div class="profile helpable" ${helpAttrs(agent.agent_name || "Analysis agent", agent.summary || "This shadow-only agent explains one part of the market.")}>
+            <div style="display:flex; justify-content:space-between; gap:8px; align-items:start">
+              <strong>${esc(agent.agent_name)}</strong>
+              ${pill(agent.status || "-", agentClass(agent.status))}
+            </div>
+            <div class="subtle">${esc(agent.summary || "")}</div>
+            <div class="subtle"><strong>Findings:</strong> ${esc((agent.findings || []).slice(0, 2).join(" | ") || "-")}</div>
+            <div class="subtle"><strong>Next:</strong> ${esc((agent.recommended_actions || [])[0] || "-")}</div>
+            <div class="mono subtle">shadow_only=${agent.shadow_only !== false}; no_order_placement=${agent.no_order_placement !== false}; orders_placed=${agent.orders_placed || 0}</div>
+          </div>`).join("")
+        : `<div class="profile helpable" ${helpAttrs("No agent output yet", "Run a shadow cycle or refresh dashboard data.")}><strong>No agent output yet</strong><div class="subtle">Run a shadow cycle or refresh dashboard data.</div></div>`;
+      q("agentDetailRows").innerHTML = agents.length
+        ? agents.map((agent) => `<tr>
+            <td><strong>${esc(agent.agent_name)}</strong><div class="subtle">${esc(agent.agent_version || "")}</div></td>
+            <td>${pill(agent.status || "-", agentClass(agent.status))}</td>
+            <td>${pct(agent.confidence || 0)}</td>
+            <td>${esc(agent.scope || "-")}</td>
+            <td>${esc((agent.findings || [])[0] || "-")}</td>
+            <td>${esc((agent.risks || [])[0] || "none")}</td>
+            <td class="${Number(agent.orders_placed || 0) ? "bad" : "good"}">${agent.orders_placed || 0}</td>
+          </tr>`).join("")
+        : emptyRow(7, "No market-intelligence agent output yet.");
+    }
+
+    function renderDaily(data) {
+      const review = data.daily_review || {};
+      const markets = review.markets || {};
+      const india = markets.INDIA || {};
+      const us = markets.US || {};
+      q("dailySubtitle").textContent = review.summary || "P&L is hypothetical unless real orders are explicitly shown.";
+      q("indiaDaily").innerHTML = dailyCard(india);
+      q("usDaily").innerHTML = dailyCard(us);
+      q("dailyComparison").innerHTML = [india, us].map((item) => `<tr>
+        <td>${esc(item.display_name || item.market || "-")}</td>
+        <td>${esc(item.review_date || "-")}</td>
+        <td>${item.signals || 0}</td>
+        <td>${item.shadow_hypotheses || 0}</td>
+        <td class="${Number(item.real_orders || 0) ? "bad" : "good"}">${item.real_orders || 0}</td>
+        <td class="${pnlClass(item.hypothetical_pnl_inr)}">${fmtInr(item.hypothetical_pnl_inr || 0)} (${pct(item.hypothetical_pnl_pct || 0)})</td>
+        <td>${item.winners || 0}/${item.losers || 0}/${item.flat || 0}</td>
+      </tr>`).join("");
+      q("historyRows").innerHTML = (review.history || []).length
+        ? review.history.map((item) => {
+            const indiaRow = item.INDIA || {};
+            const usRow = item.US || {};
+            return `<tr>
+              <td>${esc(item.review_date || "-")}</td>
+              <td class="${pnlClass(indiaRow.hypothetical_pnl_inr)}">${fmtInr(indiaRow.hypothetical_pnl_inr || 0)}</td>
+              <td>${indiaRow.shadow_hypotheses || 0}</td>
+              <td class="${pnlClass(usRow.hypothetical_pnl_inr)}">${fmtInr(usRow.hypothetical_pnl_inr || 0)}</td>
+              <td>${usRow.shadow_hypotheses || 0}</td>
+              <td class="${pnlClass(item.total_hypothetical_pnl_inr)}">${fmtInr(item.total_hypothetical_pnl_inr || 0)}</td>
+              <td class="${Number(item.total_real_orders || 0) ? "bad" : "good"}">${item.total_real_orders || 0}</td>
+            </tr>`;
+          }).join("")
+        : emptyRow(7, "No daily review history yet.");
+    }
+
+    function dailyCard(item) {
+      const lessons = [...(item.lessons || []), ...(item.next_focus || [])].slice(0, 4);
+      return [
+        row("Status", item.status || "NO_DATA"),
+        row("Date", item.review_date || "-"),
+        row("Would-have P&L", `${fmtInr(item.hypothetical_pnl_inr || 0)} (${pct(item.hypothetical_pnl_pct || 0)})`),
+        row("Signals / marks", `${item.signals || 0} / ${item.shadow_hypotheses || 0}`),
+        row("Real orders", item.real_orders || 0),
+        ...lessons.map((lesson) => row("Insight", lesson)),
+      ].join("");
+    }
+
+    function renderTraining(data) {
+      const training = data.training || {};
+      const model = training.intraday_model || data.model_training || {};
+      q("modelState").innerHTML = [
+        row("Status", model.status || "WAITING_FOR_MARKET_DATA"),
+        row("Shadow-only model", model.shadow_only === false ? "no" : "yes"),
+        row("No order placement", model.no_order_placement === false ? "no" : "yes"),
+        row("Trainable samples", `${model.trainable_samples || 0}/${model.min_total_samples_required || 100000}`),
+        row("Stop-Loss Coverage", pct(model.stop_loss_coverage || 0)),
+        row("Artifact", model.artifact_path || "-"),
+      ].join("");
+      q("modelActions").innerHTML = (model.next_actions || training.model_notes || [])
+        .slice(0, 7)
+        .map((item) => eventCard("Model action", item, model.status || "", "accent"))
+        .join("") || eventCard("Collect data", "Run market-hours shadow cycles.", "", "warn");
+      q("featureRows").innerHTML = (model.feature_diagnostics || []).length
+        ? model.feature_diagnostics.map((item) => `<tr><td>${esc(item.name)}</td><td>${item.samples || 0}</td><td>${item.correlation_to_pnl_pct == null ? "-" : num.format(item.correlation_to_pnl_pct)}</td><td>${esc(item.directional_hint || "-")}</td></tr>`).join("")
+        : emptyRow(4, "Not enough samples for feature diagnostics yet.");
+      q("strategyProfiles").innerHTML = (data.strategy_lab?.profiles || []).map((profile) => `<div class="profile helpable" ${helpAttrs(profile.name || "Strategy profile", profile.entry_model || "This strategy profile is for shadow research and review.")}>
+        <div style="display:flex; justify-content:space-between; gap:8px; align-items:start">
+          <strong>${esc(profile.name)}</strong>
+          ${pill(profile.status || "-", profile.status === "DISABLED_HIGH_RISK" ? "bad" : "accent")}
+        </div>
+        <div class="subtle">${esc(profile.entry_model || "")}</div>
+        <div class="subtle"><strong>Stop:</strong> ${esc(profile.stop_model || "")}</div>
+        <div class="subtle"><strong>Controls:</strong> ${esc((profile.risk_controls || []).join(" | "))}</div>
+      </div>`).join("");
+    }
+
+    function renderSafety(data) {
+      const system = data.system || {};
+      const risk = data.risk || {};
+      q("riskRows").innerHTML = [
+        row("Trading mode", system.trading_mode || "-"),
+        row("Live enabled", system.live_trading_enabled ? "true" : "false"),
+        row("Kill switch", system.kill_switch ? "true" : "false"),
+        row("Safety errors", (system.safety_errors || []).join(", ") || "none"),
+        row("Calendar-day decisions", risk.decisions_today || 0),
+        row("Calendar-day risk events", risk.risk_events_today || 0),
+        row("Max risk per trade", pct(risk.max_risk_per_trade_pct || 0)),
+      ].join("");
+      const brokers = (data.brokers || []).map((item) => eventCard(`${item.broker_name} ${item.market}`, `auth=${item.auth_status}, account=${item.account_status}, trading=${item.trading_enabled}`, (item.rejection_reasons || []).join(", ") || "healthy", item.trading_enabled ? "good" : "warn"));
+      const providers = (data.providers || []).map((item) => eventCard(`${item.provider_name} ${item.market}`, `status=${item.status}, freshness=${item.freshness_status}`, item.last_error || "no error", item.status === "OK" ? "good" : "warn"));
+      q("healthRows").innerHTML = [...brokers, ...providers].join("");
+      const zerodha = data.zerodha_auth || {};
+      q("zerodhaRows").innerHTML = [
+        row("Access token", zerodha.access_token_present ? "present" : "missing"),
+        row("Generated", zerodha.access_token_generated_at ? shortTime(zerodha.access_token_generated_at) : "-"),
+        row("Login time", zerodha.access_token_login_time || "-"),
+        row("Daily manual login", zerodha.manual_daily_login_required ? "required by Kite" : "not required"),
+        row("Zero intervention", zerodha.zero_intervention_possible ? "possible" : "not possible"),
+      ].join("");
+      const email = data.email || {};
+      q("emailRows").innerHTML = [
+        row("Enabled", email.enabled ? "yes" : "no"),
+        row("SMTP", `${email.smtp_host || "-"}:${email.smtp_port || "-"}`),
+        row("Delivery mode", email.local_preview_url ? "local preview" : "external SMTP"),
+        row("Recipient", email.recipient_masked || "-"),
+      ].join("");
+      q("ledgerRows").innerHTML = ledgerRows(observations(data));
+      q("orderRows").innerHTML = Object.entries(data.orders || {}).map(([status, count]) => `<tr><td>${esc(status)}</td><td>${count}</td></tr>`).join("") || emptyRow(2, "No orders.");
+    }
+
+    function ledgerRows(rows) {
+      if (!rows.length) return emptyRow(11, "No shadow ledger rows yet.");
+      return rows.slice(0, 50).map((item) => {
+        const a = assessment(item);
+        return `<tr>
+          <td><strong>${esc(item.symbol)}</strong></td>
+          <td>${esc(item.market)}</td>
+          <td>${esc(item.status)}</td>
+          <td>${num.format(item.entry_price || 0)}</td>
+          <td>${num.format(item.current_price || 0)}</td>
+          <td class="bad">${num.format(a.stop_loss || 0)}</td>
+          <td class="good">${num.format(a.take_profit || 0)}</td>
+          <td>${item.hypothetical_quantity || 0}</td>
+          <td>${fmtInr(item.hypothetical_notional_inr || 0)}</td>
+          <td class="${pnlClass(item.hypothetical_pnl_inr)}">${fmtInr(item.hypothetical_pnl_inr || 0)}</td>
+          <td>${shortTime(item.last_marked_at)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    connectWebSocket();
+  </script>
+</body>
+</html>

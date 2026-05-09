@@ -9,7 +9,7 @@ from app.db.models.order import Order
 from app.db.models.portfolio import PortfolioSnapshot
 from app.db.models.position import Position
 from app.db.models.risk import RiskConfigRecord, RiskDecisionModel, RiskEvent
-from app.db.models.shadow import DailyMarketReviewSnapshot, ShadowObservation
+from app.db.models.shadow import DailyMarketReviewSnapshot, ShadowObservation, ShadowTrainingSample
 from app.db.models.signal import AgentSignal
 from app.db.models.strategy import Strategy
 from app.db.models.system_state import BrokerHealthRecord, ComplianceState, ProviderHealthRecord, SystemState
@@ -34,6 +34,7 @@ __all__ = [
     "RiskDecisionModel",
     "RiskEvent",
     "ShadowObservation",
+    "ShadowTrainingSample",
     "Strategy",
     "SystemState",
 ]

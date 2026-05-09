@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import floor
 from pathlib import Path
 from statistics import fmean
 from typing import Any
@@ -10,9 +11,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.core.enums import Market
+from app.db.models.signal import AgentSignal
 from app.db.models.audit import AuditLog
-from app.db.models.shadow import ShadowObservation
+from app.db.models.shadow import ShadowObservation, ShadowTrainingSample
 from app.db.session import SessionLocal
 
 
@@ -59,18 +62,36 @@ class IntradayModelTrainingService:
         self,
         *,
         artifact_path: Path | None = None,
-        min_total_samples: int = 200,
-        min_samples_per_market: int = 100,
-        min_stop_loss_coverage: float = 0.95,
-        max_samples: int = 5000,
+        min_total_samples: int | None = None,
+        min_samples_per_market: int | None = None,
+        min_stop_loss_coverage: float | None = None,
+        max_samples: int | None = None,
+        settings: Settings | None = None,
     ) -> None:
+        self.settings = settings or get_settings()
         self.artifact_path = artifact_path or Path(".runtime") / "model_training" / (
             "intraday_shadow_model_report.json"
         )
-        self.min_total_samples = min_total_samples
-        self.min_samples_per_market = min_samples_per_market
-        self.min_stop_loss_coverage = min_stop_loss_coverage
-        self.max_samples = max_samples
+        self.min_total_samples = (
+            min_total_samples
+            if min_total_samples is not None
+            else self.settings.intraday_min_total_samples
+        )
+        self.min_samples_per_market = (
+            min_samples_per_market
+            if min_samples_per_market is not None
+            else self.settings.intraday_min_samples_per_market
+        )
+        self.min_stop_loss_coverage = (
+            min_stop_loss_coverage
+            if min_stop_loss_coverage is not None
+            else self.settings.intraday_min_stop_loss_coverage
+        )
+        self.max_samples = (
+            max_samples
+            if max_samples is not None
+            else self.settings.intraday_training_max_samples
+        )
 
     def status(self, db: Session | None = None) -> dict[str, Any]:
         close_session = db is None
@@ -116,12 +137,7 @@ class IntradayModelTrainingService:
                 session.close()
 
     def build_report(self, session: Session, *, artifact_written: bool) -> dict[str, Any]:
-        observations = session.scalars(
-            select(ShadowObservation)
-            .order_by(ShadowObservation.last_marked_at.desc())
-            .limit(self.max_samples)
-        ).all()
-        samples = [self._sample_from_observation(observation) for observation in observations]
+        samples = self._load_samples(session)
         trainable = [sample for sample in samples if sample.trainable]
         total_samples = len(samples)
         trainable_samples = len(trainable)
@@ -152,15 +168,28 @@ class IntradayModelTrainingService:
             "min_total_samples_required": self.min_total_samples,
             "min_samples_per_market_required": self.min_samples_per_market,
             "min_stop_loss_coverage": self.min_stop_loss_coverage,
+            "max_samples_loaded": self.max_samples,
+            "sample_goal": {
+                "purpose": "long_run_shadow_evidence_gate",
+                "plain_english": (
+                    "The target is intentionally high so the bot keeps learning across many "
+                    "market sessions before any live-trading discussion."
+                ),
+                "target_total_samples": self.min_total_samples,
+                "target_samples_per_market": self.min_samples_per_market,
+                "max_samples_loaded_per_report": self.max_samples,
+            },
             "total_samples": total_samples,
             "trainable_samples": trainable_samples,
             "stop_loss_coverage": stop_loss_coverage,
             "markets": market_reports,
             "labels": self._label_counts(trainable),
+            "outcome_summary": self._outcome_summary(trainable),
             "feature_diagnostics": self._feature_diagnostics(trainable),
             "risk_controls": [
                 "Training is fed only by shadow observations; it never places orders.",
                 "Every trainable sample must include a deterministic stop-loss and reward/risk.",
+                "Loss-discipline rules can pause fresh shadow entries after repeated losing samples.",
                 "A model report cannot change TRADING_MODE, LIVE_TRADING_ENABLED, or KILL_SWITCH.",
                 "Promotion to live requires separate risk, compliance, broker, provider, FX, and market-calendar gates.",
             ],
@@ -188,6 +217,142 @@ class IntradayModelTrainingService:
             ],
         }
         return report
+
+    def _load_samples(self, session: Session) -> list[IntradayTrainingSample]:
+        sample_rows = session.scalars(
+            select(ShadowTrainingSample)
+            .order_by(ShadowTrainingSample.sample_at.desc())
+            .limit(self.max_samples)
+        ).all()
+        samples = [self._sample_from_training_sample(sample) for sample in sample_rows]
+        remaining_limit = max(self.max_samples - len(samples), 0)
+        if remaining_limit == 0:
+            return samples
+
+        sampled_observation_ids = [sample.observation_id for sample in sample_rows if sample.observation_id]
+        sampled_signal_ids = {sample.signal_id for sample in sample_rows if sample.signal_id}
+
+        signal_rows = self._load_unsampled_signals(session, sampled_signal_ids, remaining_limit)
+        signal_samples = self._samples_from_signals(signal_rows)
+        samples.extend(signal_samples)
+        sampled_signal_ids.update(signal.id for signal in signal_rows)
+        remaining_limit = max(self.max_samples - len(samples), 0)
+        if remaining_limit == 0:
+            return samples
+
+        legacy_query = select(ShadowObservation).order_by(ShadowObservation.last_marked_at.desc())
+        if sampled_observation_ids:
+            legacy_query = legacy_query.where(ShadowObservation.id.not_in(sampled_observation_ids))
+        if sampled_signal_ids:
+            legacy_query = legacy_query.where(ShadowObservation.signal_id.not_in(sampled_signal_ids))
+        legacy_observations = session.scalars(legacy_query.limit(remaining_limit)).all()
+        samples.extend(
+            self._sample_from_observation(observation)
+            for observation in legacy_observations
+        )
+        return samples
+
+    @staticmethod
+    def _load_unsampled_signals(
+        session: Session,
+        sampled_signal_ids: set[str | None],
+        limit: int,
+    ) -> list[AgentSignal]:
+        if limit <= 0:
+            return []
+        query = (
+            select(AgentSignal)
+            .where(AgentSignal.strategy_name == "shadow_training_observation_v1")
+            .order_by(AgentSignal.created_at.desc())
+            .limit(limit)
+        )
+        concrete_signal_ids = [signal_id for signal_id in sampled_signal_ids if signal_id]
+        if concrete_signal_ids:
+            query = query.where(AgentSignal.id.not_in(concrete_signal_ids))
+        return list(session.scalars(query).all())
+
+    def _samples_from_signals(self, signals: list[AgentSignal]) -> list[IntradayTrainingSample]:
+        entry_state: dict[tuple[str, str, str], dict[str, Any]] = {}
+        samples: list[IntradayTrainingSample] = []
+        for signal in sorted(signals, key=lambda item: self._aware_datetime(item.created_at)):
+            sample = self._sample_from_signal(signal, entry_state)
+            if sample:
+                samples.append(sample)
+        return sorted(samples, key=lambda sample: sample.last_marked_at, reverse=True)
+
+    def _sample_from_signal(
+        self,
+        signal: AgentSignal,
+        entry_state: dict[tuple[str, str, str], dict[str, Any]],
+    ) -> IntradayTrainingSample | None:
+        payload = signal.payload or {}
+        assessment = payload.get("assessment") if isinstance(payload, dict) else {}
+        if not isinstance(assessment, dict):
+            assessment = {}
+        last_price = self._last_price_from_signal(signal, payload, assessment)
+        if last_price is None or last_price <= 0:
+            return None
+        fx_rate = self._signal_fx_rate(signal, payload)
+        created_at = self._aware_datetime(signal.created_at)
+        key = (signal.market.value, signal.symbol, created_at.date().isoformat())
+        if key not in entry_state:
+            price_inr = last_price * fx_rate
+            quantity = floor(self.settings.shadow_hypothesis_notional_inr / price_inr) if price_inr > 0 else 0
+            entry_state[key] = {
+                "opened_at": created_at,
+                "entry_price": last_price,
+                "quantity": quantity,
+                "notional": quantity * last_price * fx_rate,
+            }
+        entry = entry_state[key]
+        quantity = int(entry["quantity"])
+        notional = float(entry["notional"])
+        pnl = (last_price - float(entry["entry_price"])) * quantity * fx_rate
+        return IntradayTrainingSample(
+            market=signal.market.value,
+            symbol=signal.symbol,
+            opened_at=entry["opened_at"].isoformat(),
+            last_marked_at=created_at.isoformat(),
+            entry_price=float(entry["entry_price"]),
+            current_price=last_price,
+            stop_loss=self._float_or_none(assessment.get("stop_loss")),
+            take_profit=self._float_or_none(assessment.get("take_profit")),
+            confidence=self._float_or_none(assessment.get("confidence")),
+            reward_risk_ratio=self._float_or_none(assessment.get("reward_risk_ratio")),
+            expected_risk=self._float_or_none(assessment.get("expected_risk")),
+            expected_reward=self._float_or_none(assessment.get("expected_reward")),
+            hypothetical_notional_inr=notional,
+            hypothetical_pnl_inr=pnl,
+            hypothetical_pnl_pct=pnl / notional if notional else 0.0,
+        )
+
+    @staticmethod
+    def _aware_datetime(value: datetime) -> datetime:
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _last_price_from_signal(
+        signal: AgentSignal,
+        payload: dict[str, Any],
+        assessment: dict[str, Any],
+    ) -> float | None:
+        candidates = []
+        if signal.market == Market.US:
+            candidates.append(payload.get("last_price_usd"))
+        candidates.append(payload.get("last_price"))
+        metrics = assessment.get("metrics") if isinstance(assessment.get("metrics"), dict) else {}
+        candidates.append(metrics.get("last_price"))
+        for value in candidates:
+            parsed = IntradayModelTrainingService._float_or_none(value)
+            if parsed and parsed > 0:
+                return parsed
+        return None
+
+    @staticmethod
+    def _signal_fx_rate(signal: AgentSignal, payload: dict[str, Any]) -> float:
+        if signal.market != Market.US:
+            return 1.0
+        return IntradayModelTrainingService._float_or_none(payload.get("usd_inr")) or 1.0
 
     def _write_artifact(self, report: dict[str, Any]) -> None:
         self.artifact_path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,6 +405,29 @@ class IntradayModelTrainingService:
             hypothetical_notional_inr=float(observation.hypothetical_notional_inr or 0),
             hypothetical_pnl_inr=float(observation.hypothetical_pnl_inr or 0),
             hypothetical_pnl_pct=float(observation.hypothetical_pnl_pct or 0),
+        )
+
+    def _sample_from_training_sample(self, sample: ShadowTrainingSample) -> IntradayTrainingSample:
+        metadata = sample.metadata_json or {}
+        assessment = metadata.get("assessment") if isinstance(metadata, dict) else {}
+        if not isinstance(assessment, dict):
+            assessment = {}
+        return IntradayTrainingSample(
+            market=sample.market.value,
+            symbol=sample.symbol,
+            opened_at=sample.sample_at.isoformat(),
+            last_marked_at=sample.sample_at.isoformat(),
+            entry_price=float(sample.entry_price or 0),
+            current_price=float(sample.current_price or 0),
+            stop_loss=self._float_or_none(assessment.get("stop_loss")),
+            take_profit=self._float_or_none(assessment.get("take_profit")),
+            confidence=self._float_or_none(assessment.get("confidence")),
+            reward_risk_ratio=self._float_or_none(assessment.get("reward_risk_ratio")),
+            expected_risk=self._float_or_none(assessment.get("expected_risk")),
+            expected_reward=self._float_or_none(assessment.get("expected_reward")),
+            hypothetical_notional_inr=float(sample.hypothetical_notional_inr or 0),
+            hypothetical_pnl_inr=float(sample.hypothetical_pnl_inr or 0),
+            hypothetical_pnl_pct=float(sample.hypothetical_pnl_pct or 0),
         )
 
     @staticmethod
@@ -319,6 +507,89 @@ class IntradayModelTrainingService:
             if sample.take_profit is not None and sample.current_price >= sample.take_profit:
                 labels["TARGET_AREA"] += 1
         return labels
+
+    def _outcome_summary(self, samples: list[IntradayTrainingSample]) -> dict[str, Any]:
+        groups: dict[tuple[str, str, str], list[IntradayTrainingSample]] = {}
+        for sample in samples:
+            opened_date = self._parse_datetime(sample.opened_at).date().isoformat()
+            groups.setdefault((sample.market, sample.symbol, opened_date), []).append(sample)
+
+        outcome_counts = {
+            "TARGET_TOUCHED": 0,
+            "STOP_TOUCHED": 0,
+            "TIME_EXIT_POSITIVE": 0,
+            "TIME_EXIT_NEGATIVE": 0,
+            "TIME_EXIT_FLAT": 0,
+        }
+        symbol_pnl: dict[str, float] = {}
+        market_counts: dict[str, dict[str, int]] = {
+            market.value: {key: 0 for key in outcome_counts}
+            for market in Market
+        }
+        idea_rows: list[dict[str, Any]] = []
+        for (market, symbol, opened_date), group in groups.items():
+            ordered = sorted(group, key=lambda sample: self._parse_datetime(sample.last_marked_at))
+            first = ordered[0]
+            final = ordered[-1]
+            outcome = self._group_outcome(ordered)
+            outcome_counts[outcome] += 1
+            market_counts[market][outcome] += 1
+            symbol_pnl[symbol] = symbol_pnl.get(symbol, 0.0) + final.hypothetical_pnl_inr
+            idea_rows.append(
+                {
+                    "market": market,
+                    "symbol": symbol,
+                    "opened_date": opened_date,
+                    "samples": len(ordered),
+                    "outcome": outcome,
+                    "entry_price": first.entry_price,
+                    "final_price": final.current_price,
+                    "stop_loss": first.stop_loss,
+                    "take_profit": first.take_profit,
+                    "hypothetical_pnl_inr": final.hypothetical_pnl_inr,
+                    "hypothetical_pnl_pct": final.hypothetical_pnl_pct,
+                }
+            )
+        sorted_symbols = sorted(symbol_pnl.items(), key=lambda item: item[1])
+        return {
+            "ideas": len(groups),
+            "counts": outcome_counts,
+            "markets": market_counts,
+            "net_hypothetical_pnl_inr": sum(symbol_pnl.values()),
+            "target_touch_rate": outcome_counts["TARGET_TOUCHED"] / len(groups) if groups else 0.0,
+            "stop_touch_rate": outcome_counts["STOP_TOUCHED"] / len(groups) if groups else 0.0,
+            "best_symbols": [
+                {"symbol": symbol, "pnl_inr": pnl}
+                for symbol, pnl in sorted_symbols[-5:][::-1]
+            ],
+            "worst_symbols": [
+                {"symbol": symbol, "pnl_inr": pnl}
+                for symbol, pnl in sorted_symbols[:5]
+            ],
+            "recent_ideas": sorted(
+                idea_rows,
+                key=lambda row: (row["opened_date"], row["market"], row["symbol"]),
+                reverse=True,
+            )[:20],
+        }
+
+    def _group_outcome(self, samples: list[IntradayTrainingSample]) -> str:
+        for sample in samples:
+            if sample.stop_loss is not None and sample.current_price <= sample.stop_loss:
+                return "STOP_TOUCHED"
+            if sample.take_profit is not None and sample.current_price >= sample.take_profit:
+                return "TARGET_TOUCHED"
+        final = samples[-1]
+        if final.hypothetical_pnl_pct > 0.001:
+            return "TIME_EXIT_POSITIVE"
+        if final.hypothetical_pnl_pct < -0.001:
+            return "TIME_EXIT_NEGATIVE"
+        return "TIME_EXIT_FLAT"
+
+    @staticmethod
+    def _parse_datetime(value: str) -> datetime:
+        parsed = datetime.fromisoformat(value)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
     @staticmethod
     def _label(sample: IntradayTrainingSample) -> str:

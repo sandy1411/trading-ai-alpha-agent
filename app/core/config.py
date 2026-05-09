@@ -95,10 +95,40 @@ class Settings(BaseSettings):
     email_to: str = ""
 
     shadow_training_enabled: bool = True
-    shadow_training_interval_seconds: int = Field(default=300, ge=60)
-    shadow_hypothesis_notional_inr: float = Field(default=10_000, gt=0)
-    shadow_india_symbols: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,LT,AXISBANK"
-    shadow_us_symbols: str = "SPY,QQQ,AAPL,MSFT,NVDA,AMZN,META,GOOGL"
+    shadow_training_interval_seconds: int = Field(default=60, ge=60)
+    shadow_hypothesis_notional_inr: float = Field(default=50_000, gt=0)
+    intraday_min_total_samples: int = Field(default=100_000, ge=1)
+    intraday_min_samples_per_market: int = Field(default=25_000, ge=0)
+    intraday_min_stop_loss_coverage: float = Field(default=0.98, gt=0, le=1)
+    intraday_training_max_samples: int = Field(default=150_000, ge=1)
+    intraday_exit_profit_lock_pct: float = Field(default=0.70, ge=0, le=1)
+    intraday_exit_loss_watch_pct: float = Field(default=0.50, ge=0, le=1)
+    intraday_profit_giveback_exit_pct: float = Field(default=0.25, ge=0, le=1)
+    intraday_min_profit_lock_inr: float = Field(default=300, ge=0)
+    intraday_min_profit_lock_pct: float = Field(default=0.005, ge=0, le=1)
+    intraday_profit_booking_enabled: bool = True
+    intraday_profit_booking_target_progress_pct: float = Field(default=0.45, ge=0, le=1)
+    intraday_profit_booking_min_pnl_inr: float = Field(default=250, ge=0)
+    intraday_profit_booking_min_pnl_pct: float = Field(default=0.003, ge=0, le=1)
+    intraday_shadow_exit_enabled: bool = True
+    intraday_reentry_cooldown_minutes: int = Field(default=20, ge=0)
+    intraday_loss_discipline_enabled: bool = True
+    intraday_loss_discipline_lookback_minutes: int = Field(default=120, ge=1)
+    intraday_symbol_loss_pause_min_samples: int = Field(default=4, ge=1)
+    intraday_symbol_loss_pause_loss_rate: float = Field(default=0.60, ge=0, le=1)
+    intraday_symbol_loss_pause_inr: float = Field(default=1_000, ge=0)
+    intraday_symbol_loss_pause_pct: float = Field(default=0.01, ge=0, le=1)
+    intraday_market_loss_pause_min_samples: int = Field(default=20, ge=1)
+    intraday_market_loss_pause_win_rate: float = Field(default=0.35, ge=0, le=1)
+    intraday_market_loss_pause_inr: float = Field(default=5_000, ge=0)
+    shadow_india_symbols: str = (
+        "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,LT,AXISBANK,"
+        "KOTAKBANK,BAJFINANCE,BHARTIARTL,ITC,HINDUNILVR,SUNPHARMA,"
+        "MARUTI,TITAN,ASIANPAINT,ULTRACEMCO,POWERGRID,NTPC"
+    )
+    shadow_us_symbols: str = (
+        "SPY,QQQ,DIA,IWM,AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,AVGO,JPM,V,UNH"
+    )
 
     @field_validator("email_smtp_port", mode="before")
     @classmethod

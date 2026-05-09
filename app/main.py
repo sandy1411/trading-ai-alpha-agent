@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
 from app.api.routes import (
     alerts,
@@ -22,6 +23,13 @@ configure_logging()
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard")
+
+
 app.include_router(health.router)
 app.include_router(dashboard.router)
 app.include_router(alerts.router)

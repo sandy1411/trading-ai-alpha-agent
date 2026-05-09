@@ -63,3 +63,16 @@ class BrokerHealthChecker:
                 last_checked_at=utc_now(),
                 rejection_reasons=[str(exc)],
             )
+        except Exception as exc:
+            return BrokerHealth(
+                broker_name=broker.broker_name,
+                market=market,
+                auth_status=AuthStatus.INVALID,
+                account_status=AccountStatus.UNKNOWN,
+                trading_enabled=False,
+                buying_power=0,
+                cash=0,
+                positions_reconciled=False,
+                last_checked_at=utc_now(),
+                rejection_reasons=[f"broker_health_exception:{type(exc).__name__}"],
+            )

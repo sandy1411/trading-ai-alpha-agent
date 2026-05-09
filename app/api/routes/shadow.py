@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.services.market_intelligence_service import market_intelligence_service
 from app.services.shadow_readiness_service import shadow_readiness_service
 from app.services.shadow_training_service import shadow_training_service
 
@@ -25,6 +26,11 @@ def shadow_status() -> dict:
 @router.get("/readiness")
 def shadow_readiness() -> dict:
     return shadow_readiness_service.status()
+
+
+@router.get("/agents/status")
+def shadow_agents_status() -> dict:
+    return market_intelligence_service.summary()
 
 
 @router.post("/run-cycle")

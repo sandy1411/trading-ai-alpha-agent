@@ -38,3 +38,12 @@ class ProviderHealthChecker:
                 last_error=str(exc),
                 freshness_status=FreshnessStatus.MISSING,
             )
+        except Exception as exc:
+            return ProviderHealth(
+                provider_name=provider.provider_name,
+                provider_type=provider.provider_type,
+                market=market,
+                status=ProviderStatus.DOWN,
+                last_error=f"provider_health_exception:{type(exc).__name__}",
+                freshness_status=FreshnessStatus.MISSING,
+            )

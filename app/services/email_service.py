@@ -23,6 +23,8 @@ class EmailSummaryService:
         readiness = data["readiness"]
         training = data.get("training", {})
         intraday_model = training.get("intraday_model", {})
+        market_intelligence = data.get("market_intelligence", {})
+        agent_consensus = market_intelligence.get("agent_consensus", {})
         daily_review = data.get("daily_review", {})
         review_markets = daily_review.get("markets", {})
         india_review = review_markets.get("INDIA", {})
@@ -47,6 +49,12 @@ class EmailSummaryService:
             f"freshness={item['freshness_status']}, error={item.get('last_error') or 'none'}"
             for item in data["providers"]
         ]
+        agent_lines = [
+            f"- {item['agent_name']}: status={item['status']}, "
+            f"orders_placed={item.get('orders_placed', 0)}, "
+            f"summary={item.get('summary', '')}"
+            for item in market_intelligence.get("agents", [])[:7]
+        ] or ["- Market-intelligence agents have not produced a dashboard snapshot yet."]
         observation_lines = [
             f"- {item['symbol']} {item['market']}: entry={item['entry_price']}, "
             f"signal={(item.get('assessment') or {}).get('action', 'NO_TRADE')}, "
@@ -136,6 +144,12 @@ class EmailSummaryService:
                 f"- Trainable samples: {intraday_model.get('trainable_samples', 0)}",
                 f"- Stop-loss coverage: {intraday_model.get('stop_loss_coverage', 0)}",
                 *model_next_actions,
+                "",
+                "Market intelligence agents",
+                f"- Consensus: {agent_consensus.get('status', 'WAITING')}",
+                f"- Summary: {agent_consensus.get('summary', 'No consensus snapshot yet.')}",
+                f"- Orders placed by agents: {market_intelligence.get('orders_placed', 0)}",
+                *agent_lines,
                 "",
                 "Brokers",
                 *broker_lines,

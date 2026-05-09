@@ -16,12 +16,15 @@ from app.db.models.audit import AuditLog
 from app.db.models.order import Order
 from app.db.models.portfolio import PortfolioSnapshot as PortfolioSnapshotModel
 from app.db.models.risk import RiskDecisionModel, RiskEvent
-from app.db.models.shadow import DailyMarketReviewSnapshot, ShadowObservation
+from app.db.models.shadow import DailyMarketReviewSnapshot, ShadowObservation, ShadowTrainingSample
 from app.db.models.signal import AgentSignal
 from app.db.session import SessionLocal
 from app.services.broker_service import broker_service
 from app.services.intraday_model_training_service import intraday_model_training_service
+from app.services.market_intelligence_service import market_intelligence_service
+from app.services.profit_protection_service import profit_protection_service
 from app.services.provider_service import provider_service
+from app.services.shadow_exit_service import shadow_exit_service
 from app.services.shadow_readiness_service import shadow_readiness_service
 from app.services.system_state_service import system_state_service
 from app.services.zerodha_token_service import zerodha_auth_status
@@ -99,13 +102,25 @@ class PerformanceService:
                 for observation in recent_observations
                 if observation.status == "OPEN_OBSERVATION"
             ]
+            closed_shadow_exits_today = [
+                observation
+                for observation in recent_observations
+                if observation.status.startswith("CLOSED_SHADOW")
+                and observation.last_marked_at >= start
+            ]
             shadow_notional = sum(float(item.hypothetical_notional_inr) for item in active_observations)
             shadow_pnl = sum(float(item.hypothetical_pnl_inr) for item in active_observations)
+            booked_shadow_pnl = sum(
+                self._shadow_exit_pnl(observation)
+                for observation in closed_shadow_exits_today
+            )
             winners = len([item for item in active_observations if float(item.hypothetical_pnl_inr) > 0])
             losers = len([item for item in active_observations if float(item.hypothetical_pnl_inr) < 0])
             state = system_state_service.get_state()
             settings = get_settings()
             daily_review = self._daily_review_summary(session, settings)
+            day_wise_pnl = self._day_wise_profit_loss_summary(session, settings)
+            profit_protection = profit_protection_service.summary(session)
             if close_session:
                 session.commit()
             latest_cycle = self._latest_shadow_cycle()
@@ -113,6 +128,14 @@ class PerformanceService:
             brokers = broker_service.statuses()
             providers = provider_service.statuses()
             intraday_model_report = intraday_model_training_service.status(session)
+            market_intelligence = market_intelligence_service.summary(
+                session,
+                brokers=brokers,
+                providers=providers,
+                readiness=readiness,
+                profit_protection=profit_protection,
+                latest_cycle=latest_cycle,
+            )
             studied_symbols_today = sorted({signal.symbol for signal in signals_today})
             improvement_actions = self._improvement_actions(
                 latest_cycle=latest_cycle,
@@ -213,6 +236,20 @@ class PerformanceService:
                     "hypothetical_notional_inr": shadow_notional,
                     "hypothetical_pnl_inr": shadow_pnl,
                     "hypothetical_pnl_pct": shadow_pnl / shadow_notional if shadow_notional else 0,
+                    "closed_shadow_exits_today": len(closed_shadow_exits_today),
+                    "booked_shadow_pnl_inr": booked_shadow_pnl,
+                    "booked_shadow_profit_count": len(
+                        [
+                            item for item in closed_shadow_exits_today
+                            if self._shadow_exit_pnl(item) > 0
+                        ]
+                    ),
+                    "booked_shadow_loss_count": len(
+                        [
+                            item for item in closed_shadow_exits_today
+                            if self._shadow_exit_pnl(item) < 0
+                        ]
+                    ),
                     "winners": winners,
                     "losers": losers,
                     "flat": max(len(active_observations) - winners - losers, 0),
@@ -234,12 +271,16 @@ class PerformanceService:
                             "hypothetical_pnl_pct": float(observation.hypothetical_pnl_pct),
                             "notes": observation.notes,
                             "assessment": self._assessment_from_observation(observation),
+                            "exit_decision": self._exit_decision_from_observation(observation),
                         }
                         for observation in recent_observations
                     ],
                 },
                 "markets": market_summaries,
                 "daily_review": daily_review,
+                "day_wise_pnl": day_wise_pnl,
+                "profit_protection": profit_protection,
+                "market_intelligence": market_intelligence,
                 "training": training,
                 "model_training": intraday_model_report,
                 "strategy_lab": strategy_lab,
@@ -309,6 +350,37 @@ class PerformanceService:
         metadata = observation.metadata_json or {}
         assessment = metadata.get("assessment")
         return assessment if isinstance(assessment, dict) else {}
+
+    @staticmethod
+    def _shadow_exit_pnl(observation: ShadowObservation) -> float:
+        metadata = observation.metadata_json or {}
+        shadow_exit = metadata.get("shadow_exit") if isinstance(metadata, dict) else {}
+        if isinstance(shadow_exit, dict) and shadow_exit.get("exit_pnl_inr") is not None:
+            return float(shadow_exit.get("exit_pnl_inr") or 0)
+        return float(observation.hypothetical_pnl_inr or 0)
+
+    @staticmethod
+    def _exit_decision_from_observation(observation: ShadowObservation) -> dict[str, Any]:
+        metadata = observation.metadata_json or {}
+        shadow_exit = metadata.get("shadow_exit") if isinstance(metadata, dict) else {}
+        if isinstance(shadow_exit, dict) and shadow_exit.get("action"):
+            return {
+                "action": shadow_exit.get("action"),
+                "label": shadow_exit.get("label", "Shadow exit booked"),
+                "urgency": shadow_exit.get("urgency", "HIGH"),
+                "reason": shadow_exit.get("reason", "Shadow exit was already recorded."),
+                "progress_to_target": None,
+                "progress_to_stop": None,
+                "reentry_plan": shadow_exit.get(
+                    "reentry_plan",
+                    "Wait for the cooldown and a fresh qualified setup before re-entry.",
+                ),
+                "shadow_only": True,
+                "no_order_placement": True,
+                "booked": True,
+                "exited_at": shadow_exit.get("exited_at"),
+            }
+        return shadow_exit_service.evaluate_observation(observation).model_dump()
 
     @staticmethod
     def _market_summary(
@@ -413,11 +485,37 @@ class PerformanceService:
         latest_cycle: dict[str, Any] | None,
         intraday_model_report: dict[str, Any],
     ) -> dict[str, Any]:
-        minimum_review_samples_per_market = 100
+        minimum_review_samples_per_market = settings.intraday_min_samples_per_market
         total_real_orders = sum(order_counts.values())
+        model_markets = intraday_model_report.get("markets", {})
+        india_model_samples = int(
+            model_markets.get(Market.INDIA.value, {}).get("trainable_samples", 0)
+        )
+        us_model_samples = int(
+            model_markets.get(Market.US.value, {}).get("trainable_samples", 0)
+        )
+        model_total_samples = int(intraday_model_report.get("trainable_samples", total_observations))
+        configured_symbol_count = (
+            len(settings.shadow_india_symbol_list) + len(settings.shadow_us_symbol_list)
+        )
+        interval_seconds = settings.shadow_training_interval_seconds
+        missing_total_samples = max(
+            int(intraday_model_report.get("min_total_samples_required", 200)) - model_total_samples,
+            0,
+        )
+        cycles_to_minimum = (
+            (missing_total_samples + configured_symbol_count - 1) // configured_symbol_count
+            if configured_symbol_count
+            else 0
+        )
         market_progress = {
             market: min(
-                summary["total_observations"] / minimum_review_samples_per_market,
+                (
+                    india_model_samples
+                    if market == Market.INDIA.value
+                    else us_model_samples
+                )
+                / minimum_review_samples_per_market,
                 1.0,
             )
             for market, summary in market_summaries.items()
@@ -425,21 +523,13 @@ class PerformanceService:
         checks = [
             {
                 "name": "collect_india_shadow_samples",
-                "passed": market_summaries[Market.INDIA.value]["total_observations"]
-                >= minimum_review_samples_per_market,
-                "detail": (
-                    f"{market_summaries[Market.INDIA.value]['total_observations']}/"
-                    f"{minimum_review_samples_per_market}"
-                ),
+                "passed": india_model_samples >= minimum_review_samples_per_market,
+                "detail": f"{india_model_samples}/{minimum_review_samples_per_market}",
             },
             {
                 "name": "collect_us_shadow_samples",
-                "passed": market_summaries[Market.US.value]["total_observations"]
-                >= minimum_review_samples_per_market,
-                "detail": (
-                    f"{market_summaries[Market.US.value]['total_observations']}/"
-                    f"{minimum_review_samples_per_market}"
-                ),
+                "passed": us_model_samples >= minimum_review_samples_per_market,
+                "detail": f"{us_model_samples}/{minimum_review_samples_per_market}",
             },
             {
                 "name": "real_orders_must_remain_zero",
@@ -448,8 +538,8 @@ class PerformanceService:
             },
             {
                 "name": "stop_target_rr_recorded",
-                "passed": total_observations > 0,
-                "detail": "Each new shadow observation stores deterministic stop, target, and reward/risk metadata.",
+                "passed": model_total_samples > 0,
+                "detail": "Each timestamped intraday sample stores deterministic stop, target, and reward/risk metadata.",
             },
         ]
         return {
@@ -457,14 +547,33 @@ class PerformanceService:
             "strategy_name": "conservative_shadow_v1",
             "promotion_status": "LIVE_BLOCKED_BY_DESIGN",
             "minimum_review_samples_per_market": minimum_review_samples_per_market,
-            "total_observations": total_observations,
+            "total_observations": model_total_samples,
+            "open_shadow_observations": total_observations,
             "market_progress": market_progress,
             "checks": checks,
-            "current_loop_interval_seconds": settings.shadow_training_interval_seconds,
+            "current_loop_interval_seconds": interval_seconds,
+            "sample_collection": {
+                "mode": "TIMESTAMPED_INTRADAY_MARKS",
+                "configured_symbols_per_full_cycle": configured_symbol_count,
+                "estimated_samples_per_full_open_cycle": configured_symbol_count,
+                "minutes_per_cycle": interval_seconds / 60,
+                "cycles_to_minimum_total": cycles_to_minimum,
+                "estimated_minutes_to_minimum_if_both_markets_open": (
+                    cycles_to_minimum * interval_seconds / 60
+                ),
+                "why_previous_count_was_slow": (
+                    "Earlier reports counted one open observation per symbol. The trainer now "
+                    "counts timestamped shadow samples from each market-data cycle."
+                ),
+                "long_run_target_reason": (
+                    "The sample target is intentionally high so intraday rules are judged across "
+                    "many sessions, not a small lucky patch."
+                ),
+            },
             "last_cycle_status": latest_cycle.get("status") if latest_cycle else "NO_CYCLE_RECORDED",
             "intraday_model": intraday_model_report,
             "model_notes": [
-                "The engine is collecting real-data shadow observations for calibration.",
+                "The engine is collecting timestamped real-data shadow samples for intraday calibration.",
                 f"Intraday model training status: {intraday_model_report['status']}.",
                 "No learned model is allowed to place orders.",
                 "Promotion requires manual review, risk approval, reconciliation, and compliance gates.",
@@ -735,6 +844,198 @@ class PerformanceService:
             row["total_hypothetical_pnl_inr"] += float(snapshot.hypothetical_pnl_inr)
             row["total_real_orders"] += snapshot.real_orders
         return list(by_date.values())[:limit_days]
+
+    @classmethod
+    def _day_wise_profit_loss_summary(
+        cls,
+        session: Session,
+        settings: Any,
+        limit_days: int = 21,
+    ) -> dict[str, Any]:
+        cutoff = datetime.now(UTC) - timedelta(days=limit_days + 3)
+        samples = session.scalars(
+            select(ShadowTrainingSample)
+            .where(ShadowTrainingSample.sample_at >= cutoff)
+            .order_by(ShadowTrainingSample.sample_at.desc())
+        ).all()
+        latest_by_symbol_day: dict[tuple[str, str, str], ShadowTrainingSample] = {}
+        for sample in samples:
+            market = sample.market
+            local_day = cls._market_local_date(settings=settings, market=market, value=sample.sample_at)
+            key = (local_day, market.value, sample.symbol)
+            existing = latest_by_symbol_day.get(key)
+            if existing is None or cls._aware_utc(sample.sample_at) > cls._aware_utc(existing.sample_at):
+                latest_by_symbol_day[key] = sample
+
+        market_days: dict[tuple[str, str], list[ShadowTrainingSample]] = {}
+        for (local_day, market, _symbol), sample in latest_by_symbol_day.items():
+            market_days.setdefault((local_day, market), []).append(sample)
+
+        market_rows = [
+            cls._market_day_profit_loss_row(
+                review_date=review_date,
+                market=market,
+                samples=day_samples,
+            )
+            for (review_date, market), day_samples in market_days.items()
+        ]
+        market_rows.sort(key=lambda row: (row["review_date"], row["market"]), reverse=True)
+
+        by_day: dict[str, dict[str, Any]] = {}
+        for row in market_rows:
+            day = by_day.setdefault(
+                row["review_date"],
+                {
+                    "review_date": row["review_date"],
+                    "markets": {},
+                    "shadow_invested_count": 0,
+                    "symbols_studied_count": 0,
+                    "hypothetical_notional_inr": 0.0,
+                    "hypothetical_pnl_inr": 0.0,
+                    "winners": 0,
+                    "losers": 0,
+                    "flat": 0,
+                    "real_orders": 0,
+                    "good_stocks": [],
+                    "loss_stocks": [],
+                },
+            )
+            day["markets"][row["market"]] = row
+            day["shadow_invested_count"] += row["shadow_invested_count"]
+            day["symbols_studied_count"] += row["symbols_studied_count"]
+            day["hypothetical_notional_inr"] += row["hypothetical_notional_inr"]
+            day["hypothetical_pnl_inr"] += row["hypothetical_pnl_inr"]
+            day["winners"] += row["winners"]
+            day["losers"] += row["losers"]
+            day["flat"] += row["flat"]
+            day["good_stocks"].extend(row["good_stocks"])
+            day["loss_stocks"].extend(row["loss_stocks"])
+
+        days = sorted(by_day.values(), key=lambda row: row["review_date"], reverse=True)[:limit_days]
+        for day in days:
+            notional = float(day["hypothetical_notional_inr"])
+            day["hypothetical_pnl_pct"] = (
+                float(day["hypothetical_pnl_inr"]) / notional if notional else 0.0
+            )
+            day["good_stocks"] = sorted(
+                day["good_stocks"],
+                key=lambda item: item["hypothetical_pnl_inr"],
+                reverse=True,
+            )[:8]
+            day["loss_stocks"] = sorted(
+                day["loss_stocks"],
+                key=lambda item: item["hypothetical_pnl_inr"],
+            )[:8]
+            day["status"] = cls._pnl_status(float(day["hypothetical_pnl_inr"]))
+
+        latest_day = days[0] if days else None
+        return {
+            "title": "Day-wise Shadow Profit/Loss",
+            "mode": "SHADOW_PNL_NOT_REALIZED_TRADING_PNL",
+            "generated_at": datetime.now(UTC).isoformat(),
+            "lookback_days": limit_days,
+            "days": days,
+            "latest_day": latest_day,
+            "summary": {
+                "days_with_samples": len(days),
+                "total_shadow_invested_count": sum(
+                    int(day["shadow_invested_count"]) for day in days
+                ),
+                "total_symbols_studied_count": sum(
+                    int(day["symbols_studied_count"]) for day in days
+                ),
+                "total_hypothetical_notional_inr": sum(
+                    float(day["hypothetical_notional_inr"]) for day in days
+                ),
+                "total_hypothetical_pnl_inr": sum(
+                    float(day["hypothetical_pnl_inr"]) for day in days
+                ),
+                "total_winners": sum(int(day["winners"]) for day in days),
+                "total_losers": sum(int(day["losers"]) for day in days),
+                "total_flat": sum(int(day["flat"]) for day in days),
+                "real_orders": 0,
+                "plain_english": (
+                    "This page uses the latest shadow mark per stock per market day. "
+                    "It is training visibility, not realized broker profit or loss."
+                ),
+            },
+        }
+
+    @classmethod
+    def _market_day_profit_loss_row(
+        cls,
+        *,
+        review_date: str,
+        market: str,
+        samples: list[ShadowTrainingSample],
+    ) -> dict[str, Any]:
+        stock_rows = [
+            {
+                "market": market,
+                "symbol": sample.symbol,
+                "sample_at": sample.sample_at.isoformat(),
+                "entry_price": float(sample.entry_price or 0),
+                "current_price": float(sample.current_price or 0),
+                "hypothetical_quantity": int(sample.hypothetical_quantity or 0),
+                "hypothetical_notional_inr": float(sample.hypothetical_notional_inr or 0),
+                "hypothetical_pnl_inr": float(sample.hypothetical_pnl_inr or 0),
+                "hypothetical_pnl_pct": float(sample.hypothetical_pnl_pct or 0),
+                "direction": cls._pnl_direction(float(sample.hypothetical_pnl_inr or 0)),
+            }
+            for sample in samples
+        ]
+        stock_rows.sort(key=lambda item: item["hypothetical_pnl_inr"], reverse=True)
+        invested = [
+            row for row in stock_rows
+            if row["hypothetical_quantity"] > 0 and row["hypothetical_notional_inr"] > 0
+        ]
+        pnl = sum(row["hypothetical_pnl_inr"] for row in invested)
+        notional = sum(row["hypothetical_notional_inr"] for row in invested)
+        winners = [row for row in invested if row["hypothetical_pnl_inr"] > 0]
+        losers = [row for row in invested if row["hypothetical_pnl_inr"] < 0]
+        flat = [row for row in invested if row["hypothetical_pnl_inr"] == 0]
+        return {
+            "review_date": review_date,
+            "market": market,
+            "display_name": "India" if market == Market.INDIA.value else "United States",
+            "shadow_invested_count": len(invested),
+            "symbols_studied_count": len(stock_rows),
+            "hypothetical_notional_inr": notional,
+            "hypothetical_pnl_inr": pnl,
+            "hypothetical_pnl_pct": pnl / notional if notional else 0.0,
+            "winners": len(winners),
+            "losers": len(losers),
+            "flat": len(flat),
+            "status": cls._pnl_status(pnl),
+            "good_stocks": stock_rows[:5],
+            "loss_stocks": sorted(stock_rows, key=lambda item: item["hypothetical_pnl_inr"])[:5],
+            "stock_rows": stock_rows,
+        }
+
+    @staticmethod
+    def _market_local_date(*, settings: Any, market: Market, value: datetime) -> str:
+        timezone_name = settings.india_timezone if market == Market.INDIA else settings.us_timezone
+        return PerformanceService._aware_utc(value).astimezone(ZoneInfo(timezone_name)).date().isoformat()
+
+    @staticmethod
+    def _aware_utc(value: datetime) -> datetime:
+        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _pnl_status(value: float) -> str:
+        if value > 0:
+            return "NET_PROFIT_SHADOW"
+        if value < 0:
+            return "NET_LOSS_SHADOW"
+        return "FLAT_SHADOW"
+
+    @staticmethod
+    def _pnl_direction(value: float) -> str:
+        if value > 0:
+            return "UP"
+        if value < 0:
+            return "DOWN"
+        return "FLAT"
 
     @staticmethod
     def _symbol_pnl(observation: ShadowObservation | None) -> dict[str, Any] | None:

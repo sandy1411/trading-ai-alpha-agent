@@ -1,6 +1,6 @@
 param(
-    [int]$Port = 8000,
-    [int]$IntervalSeconds = 300
+    [int]$Port = 8001,
+    [int]$IntervalSeconds = 60
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,16 +32,40 @@ Stop-SandyProcesses
 Start-Sleep -Seconds 2
 Stop-SandyProcesses
 
-$listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-foreach ($listener in $listeners) {
-    $ownerProcessId = $listener.OwningProcess
-    if ($ownerProcessId -and $ownerProcessId -ne 0) {
-        $owner = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerProcessId" -ErrorAction SilentlyContinue
-        if ($owner -and $owner.CommandLine -like "*uvicorn app.main:app*") {
-            Stop-Process -Id $ownerProcessId -Force
-            Write-Host "Stopped existing listener on port ${Port}: $ownerProcessId"
-        }
+function Get-PortOwner {
+    param([int]$CandidatePort)
+
+    $listener = Get-NetTCPConnection -LocalPort $CandidatePort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $listener) {
+        return $null
     }
+    return Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
+}
+
+function Test-SandyProcess {
+    param($Process)
+    return $Process -and $Process.CommandLine -like "*dalalwall-ai-alpha-agent*" -and $Process.CommandLine -like "*uvicorn app.main:app*"
+}
+
+$requestedPort = $Port
+while ($true) {
+    $owner = Get-PortOwner -CandidatePort $Port
+    if (-not $owner) {
+        break
+    }
+    if (Test-SandyProcess -Process $owner) {
+        Stop-Process -Id $owner.ProcessId -Force
+        Write-Host "Stopped existing Sandy-Trading-AI listener on port ${Port}: $($owner.ProcessId)"
+        Start-Sleep -Seconds 1
+        continue
+    }
+    Write-Host "Port $Port is occupied by another process: $($owner.CommandLine)"
+    $Port += 1
+    Write-Host "Trying dashboard port $Port instead."
+}
+
+if ($Port -ne $requestedPort) {
+    Write-Host "Using fallback dashboard port $Port because requested port $requestedPort is busy."
 }
 
 Write-Host "Starting FastAPI dashboard..."
