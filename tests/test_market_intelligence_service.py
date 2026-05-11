@@ -9,6 +9,7 @@ from app.core.config import Settings
 from app.core.enums import Market
 from app.core.time_utils import utc_now
 from app.db.base import Base
+from app.db.models.news import NewsItem
 from app.db.models.order import Order
 from app.db.models.shadow import ShadowTrainingSample
 from app.services.market_intelligence_service import MarketIntelligenceService
@@ -219,3 +220,43 @@ def test_market_intelligence_pnl_uses_latest_mark_per_shadow_idea() -> None:
     assert price_agent["metrics"]["markets"]["INDIA"]["unique_shadow_ideas"] == 2
     assert price_agent["metrics"]["markets"]["INDIA"]["winners"] == 1
     assert price_agent["metrics"]["markets"]["INDIA"]["losers"] == 1
+
+
+def test_market_intelligence_news_agent_reports_blocking_sentiment() -> None:
+    service = MarketIntelligenceService(
+        Settings(_env_file=None, news_ingestion_enabled=False, alpha_vantage_api_key="key")
+    )
+
+    with _session() as session:
+        session.add(
+            NewsItem(
+                market=Market.INDIA,
+                symbol=None,
+                provider="ALPHA_VANTAGE_NEWS",
+                headline="India market risk-off headlines hit sentiment",
+                published_at=utc_now(),
+                raw_payload={"overall_sentiment_score": "-0.40"},
+            )
+        )
+        session.commit()
+        summary = service.summary(
+            session,
+            brokers=[],
+            providers=[],
+            readiness={
+                "ready_for_india_shadow_now": True,
+                "ready_for_us_shadow_now": False,
+                "checks": [],
+            },
+            profit_protection=_profit_protection_stub(),
+            include_external_health=False,
+        )
+
+    news_agent = next(
+        agent for agent in summary["agents"] if agent["agent_name"] == "NewsSentimentAgent"
+    )
+
+    assert news_agent["status"] == "WARN"
+    assert news_agent["scope"] == "NEWS_SENTIMENT_ENTRY_GUARD"
+    assert news_agent["metrics"]["india_news_gate"]["action"] == "BLOCK_NEW_ENTRIES"
+    assert any("negative_news_sentiment_score" in risk for risk in news_agent["risks"])

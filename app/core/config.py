@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     data_staleness_seconds_intraday: int = Field(default=120, ge=1)
     news_staleness_minutes: int = Field(default=60, ge=1)
     fx_staleness_minutes: int = Field(default=60, ge=1)
+    news_sentiment_guard_enabled: bool = True
+    news_sentiment_block_shadow_entries: bool = True
+    news_sentiment_fail_closed_for_live: bool = True
+    news_ingestion_enabled: bool = True
+    news_ingestion_min_interval_seconds: int = Field(default=900, ge=60)
+    news_negative_score_threshold: float = Field(default=-0.15, ge=-1, le=0)
 
     india_timezone: str = "Asia/Kolkata"
     us_timezone: str = "America/New_York"

@@ -10,6 +10,7 @@ from app.core.errors import FailClosedError
 from app.core.enums import FreshnessStatus, Market, MarketCalendarState, TradeAction
 from app.db.base import Base
 from app.db.models.order import Order
+from app.db.models.news import NewsItem
 from app.db.models.risk import RiskEvent
 from app.db.models.shadow import ShadowObservation, ShadowTrainingSample
 from app.schemas.fx import FXRateStatus
@@ -834,3 +835,80 @@ def test_previous_session_loss_pause_uses_market_local_day_boundary() -> None:
     assert current_day_pause is None
     assert previous_day_pause is not None
     assert previous_day_pause["scope"] == "PREVIOUS_SESSION_SYMBOL"
+
+
+def test_shadow_training_blocks_fresh_entry_on_negative_news_sentiment(monkeypatch) -> None:
+    class ProviderStub:
+        def __init__(self, settings) -> None:
+            self.settings = settings
+
+        def latest(self, symbol: str, market: Market) -> dict:
+            return {
+                "data": {
+                    f"NSE:{symbol}": {
+                        "last_price": 100.0,
+                        "average_price": 100.0,
+                        "volume": 100000,
+                        "ohlc": {
+                            "open": 99.0,
+                            "high": 101.0,
+                            "low": 98.0,
+                            "close": 98.0,
+                        },
+                    }
+                }
+            }
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+    settings = Settings(
+        _env_file=None,
+        shadow_training_enabled=True,
+        shadow_hypothesis_notional_inr=10000,
+        shadow_india_symbols="TITAN",
+        shadow_us_symbols="",
+        news_ingestion_enabled=False,
+        news_sentiment_guard_enabled=True,
+        news_sentiment_block_shadow_entries=True,
+    )
+    service = ShadowTrainingService(settings)
+    service.strategy = _FixedExitStrategy([_Assessment()])
+    monkeypatch.setattr(
+        service.calendar,
+        "status",
+        lambda market: MarketCalendarStatus(
+            market=market,
+            state=MarketCalendarState.OPEN,
+            reason="regular_session_open",
+        ),
+    )
+    monkeypatch.setattr(shadow_module, "ZerodhaDataProvider", ProviderStub)
+
+    with session_factory() as session:
+        session.add(
+            NewsItem(
+                market=None,
+                symbol=None,
+                provider="TEST_NEWS",
+                headline="Gold import duty shock hits jewellery demand",
+                published_at=utc_now(),
+                raw_payload={},
+            )
+        )
+        session.commit()
+
+        result = service.run_cycle(session)
+        observation_count = session.scalar(select(func.count()).select_from(ShadowObservation))
+        news_event = session.scalar(
+            select(RiskEvent).where(RiskEvent.event_type == "shadow_news_sentiment_entry_blocked")
+        )
+        order_count = session.scalar(select(func.count()).select_from(Order))
+
+    assert result["orders_placed"] == 0
+    assert result["india"]["observed"] == 1
+    assert result["shadow_observations_updated"] == 0
+    assert observation_count == 0
+    assert news_event is not None
+    assert news_event.context["reason"] == "negative_news_keyword_risk"
+    assert order_count == 0

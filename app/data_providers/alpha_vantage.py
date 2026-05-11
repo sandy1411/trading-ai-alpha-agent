@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -40,3 +41,38 @@ class AlphaVantageProvider(BaseDataProvider):
         if response.status_code != 200:
             raise FailClosedError("alpha_vantage_quote_unavailable")
         return dict(response.json())
+
+    def news_sentiment(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        topics: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        self.validate_credentials()
+        params: dict[str, str] = {
+            "function": "NEWS_SENTIMENT",
+            "apikey": self.settings.alpha_vantage_api_key,
+            "sort": "LATEST",
+            "limit": "50",
+        }
+        if tickers:
+            params["tickers"] = ",".join(tickers)
+        if topics:
+            params["topics"] = ",".join(topics)
+        response = self.client.get(self.base_url, params=params)
+        if response.status_code != 200:
+            raise FailClosedError("alpha_vantage_news_unavailable")
+        payload = response.json()
+        feed = payload.get("feed", [])
+        if not isinstance(feed, list):
+            raise FailClosedError("alpha_vantage_news_payload_invalid")
+        return [item for item in feed if isinstance(item, dict)]
+
+    @staticmethod
+    def parse_news_time(value: str | None) -> datetime:
+        if not value:
+            return datetime.now(UTC)
+        try:
+            return datetime.strptime(value, "%Y%m%dT%H%M%S").replace(tzinfo=UTC)
+        except ValueError:
+            return datetime.now(UTC)

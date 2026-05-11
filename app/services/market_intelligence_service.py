@@ -19,6 +19,7 @@ from app.risk.market_calendar import MarketCalendar
 from app.schemas.broker import BrokerHealth
 from app.schemas.provider import ProviderHealth
 from app.services.broker_service import broker_service
+from app.services.news_sentiment_service import NewsSentimentService
 from app.services.profit_protection_service import profit_protection_service
 from app.services.provider_service import provider_service
 from app.services.shadow_readiness_service import shadow_readiness_service
@@ -65,6 +66,7 @@ class MarketIntelligenceService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self.calendar = MarketCalendar(self.settings)
+        self.news_sentiment = NewsSentimentService(self.settings)
 
     def summary(
         self,
@@ -252,10 +254,17 @@ class MarketIntelligenceService:
             or self.settings.benzinga_api_key
         )
         latest_at = self._iso_or_none(latest_news.published_at) if latest_news else None
+        india_risk = self.news_sentiment.assess(db, market=Market.INDIA)
+        us_risk = self.news_sentiment.assess(db, market=Market.US)
+        blocking_risks = [risk for risk in (india_risk, us_risk) if risk.blocks_new_entries]
         status = "OK" if has_news_credentials and fresh_news_count > 0 else "UNAVAILABLE"
+        if blocking_risks:
+            status = "WARN"
         findings = [
             f"News credentials configured: {'yes' if has_news_credentials else 'no'}.",
             f"Fresh headlines inside {self.settings.news_staleness_minutes} minutes: {fresh_news_count}.",
+            f"India news gate: {india_risk.action} ({india_risk.reason}).",
+            f"US news gate: {us_risk.action} ({us_risk.reason}).",
         ]
         if latest_news:
             findings.append(f"Latest stored headline provider={latest_news.provider}, symbol={latest_news.symbol or 'market'}." )
@@ -266,14 +275,15 @@ class MarketIntelligenceService:
             risks.append("news_credentials_missing")
         if fresh_news_count == 0:
             risks.append("fresh_news_sentiment_unavailable")
+        risks.extend(f"{risk.market.value}:{risk.reason}" for risk in blocking_risks)
         return self._report(
             agent_name="NewsSentimentAgent",
-            scope="NEWS_SENTIMENT_CAUTION_ONLY",
+            scope="NEWS_SENTIMENT_ENTRY_GUARD",
             status=status,
             confidence=0.75 if status == "OK" else 0.0,
             summary=(
-                "News/sentiment is treated as a caution signal only. It can block or lower "
-                "confidence after ingestion exists; it cannot upgrade a stock to BUY."
+                "News/sentiment is a risk reducer. It can block or lower confidence; it "
+                "cannot upgrade a stock to BUY."
             ),
             findings=findings,
             risks=risks,
@@ -288,6 +298,8 @@ class MarketIntelligenceService:
                 "fresh_news_count": fresh_news_count,
                 "latest_news_at": latest_at,
                 "sentiment_used_for_buy": False,
+                "india_news_gate": india_risk.model_dump(),
+                "us_news_gate": us_risk.model_dump(),
             },
         )
 

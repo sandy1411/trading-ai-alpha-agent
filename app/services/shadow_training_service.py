@@ -24,6 +24,7 @@ from app.db.session import SessionLocal
 from app.risk.market_calendar import MarketCalendar
 from app.services.intraday_model_training_service import intraday_model_training_service
 from app.services.market_intelligence_service import market_intelligence_service
+from app.services.news_sentiment_service import NewsSentimentService
 from app.services.shadow_exit_service import shadow_exit_service
 from app.strategies.conservative_shadow import ConservativeShadowStrategy
 
@@ -34,6 +35,7 @@ class ShadowTrainingService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self.calendar = MarketCalendar(self.settings)
+        self.news_sentiment = NewsSentimentService(self.settings)
         self.strategy = ConservativeShadowStrategy()
 
     def run_cycle(self, db: Session | None = None) -> dict[str, Any]:
@@ -56,6 +58,7 @@ class ShadowTrainingService:
                 result["status"] = "disabled"
                 return result
             strategy = self._get_or_create_strategy(session)
+            result["news_sentiment_ingestion"] = self.news_sentiment.ingest_if_due(session)
             self._run_india_cycle(session, strategy, result)
             self._run_us_cycle(session, strategy, result)
             result["intraday_model_training"] = self._run_intraday_model_training(session)
@@ -313,6 +316,20 @@ class ShadowTrainingService:
                         "no fresh shadow buy/watch observation opened."
                     ),
                     "INFO",
+                )
+                return False
+            news_risk = self.news_sentiment.assess(session, market=market, symbol=symbol)
+            if self.settings.news_sentiment_block_shadow_entries and news_risk.blocks_new_entries:
+                self._record_risk_event(
+                    session,
+                    market,
+                    "shadow_news_sentiment_entry_blocked",
+                    (
+                        f"{symbol}: fresh shadow entry blocked by news/sentiment guard. "
+                        f"{news_risk.reason}"
+                    ),
+                    news_risk.severity,
+                    context=news_risk.model_dump(),
                 )
                 return False
             cooldown = self._active_reentry_cooldown(session, market, symbol, now)
@@ -893,6 +910,7 @@ class ShadowTrainingService:
         event_type: str,
         message: str,
         severity: str = "INFO",
+        context: dict[str, Any] | None = None,
     ) -> None:
         session.add(
             RiskEvent(
@@ -900,7 +918,7 @@ class ShadowTrainingService:
                 event_type=event_type,
                 severity=severity,
                 message=message,
-                context={"shadow_training": True},
+                context={"shadow_training": True, **(context or {})},
             )
         )
 
