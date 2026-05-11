@@ -63,7 +63,7 @@ def test_market_intelligence_agents_are_shadow_only_and_do_not_order() -> None:
     assert all(agent["no_order_placement"] is True for agent in summary["agents"])
     assert news_agent["status"] == "UNAVAILABLE"
     assert news_agent["metrics"]["sentiment_used_for_buy"] is False
-    assert "fresh_news_sentiment_unavailable" in news_agent["risks"]
+    assert "news_sentiment_unavailable_for_risk_window" in news_agent["risks"]
 
 
 def test_market_intelligence_reads_real_shadow_samples_without_creating_orders() -> None:

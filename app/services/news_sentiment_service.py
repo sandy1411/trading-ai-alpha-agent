@@ -157,7 +157,7 @@ class NewsSentimentService:
         if not self.settings.news_sentiment_guard_enabled:
             return self._clear(market, symbol, "news_sentiment_guard_disabled")
 
-        cutoff = datetime.now(UTC) - timedelta(minutes=self.settings.news_staleness_minutes)
+        cutoff = datetime.now(UTC) - timedelta(hours=self.settings.news_sentiment_risk_window_hours)
         query = (
             select(NewsItem)
             .where(NewsItem.published_at >= cutoff)

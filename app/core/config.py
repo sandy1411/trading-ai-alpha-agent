@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     news_ingestion_enabled: bool = True
     news_ingestion_min_interval_seconds: int = Field(default=900, ge=60)
     news_negative_score_threshold: float = Field(default=-0.15, ge=-1, le=0)
+    news_sentiment_risk_window_hours: int = Field(default=36, ge=1, le=168)
 
     india_timezone: str = "Asia/Kolkata"
     us_timezone: str = "America/New_York"

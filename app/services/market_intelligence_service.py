@@ -248,6 +248,14 @@ class MarketIntelligenceService:
             .select_from(NewsItem)
             .where(NewsItem.published_at >= fresh_cutoff)
         ) or 0
+        risk_window_cutoff = datetime.now(UTC) - timedelta(
+            hours=self.settings.news_sentiment_risk_window_hours
+        )
+        risk_window_news_count = db.scalar(
+            select(func.count())
+            .select_from(NewsItem)
+            .where(NewsItem.published_at >= risk_window_cutoff)
+        ) or 0
         has_news_credentials = bool(
             self.settings.alpha_vantage_api_key
             or self.settings.finnhub_api_key
@@ -257,12 +265,16 @@ class MarketIntelligenceService:
         india_risk = self.news_sentiment.assess(db, market=Market.INDIA)
         us_risk = self.news_sentiment.assess(db, market=Market.US)
         blocking_risks = [risk for risk in (india_risk, us_risk) if risk.blocks_new_entries]
-        status = "OK" if has_news_credentials and fresh_news_count > 0 else "UNAVAILABLE"
+        status = "OK" if has_news_credentials and risk_window_news_count > 0 else "UNAVAILABLE"
         if blocking_risks:
             status = "WARN"
         findings = [
             f"News credentials configured: {'yes' if has_news_credentials else 'no'}.",
             f"Fresh headlines inside {self.settings.news_staleness_minutes} minutes: {fresh_news_count}.",
+            (
+                "Risk-window headlines inside "
+                f"{self.settings.news_sentiment_risk_window_hours} hours: {risk_window_news_count}."
+            ),
             f"India news gate: {india_risk.action} ({india_risk.reason}).",
             f"US news gate: {us_risk.action} ({us_risk.reason}).",
         ]
@@ -274,7 +286,9 @@ class MarketIntelligenceService:
         if not has_news_credentials:
             risks.append("news_credentials_missing")
         if fresh_news_count == 0:
-            risks.append("fresh_news_sentiment_unavailable")
+            risks.append("no_headlines_inside_fresh_window")
+        if risk_window_news_count == 0:
+            risks.append("news_sentiment_unavailable_for_risk_window")
         risks.extend(f"{risk.market.value}:{risk.reason}" for risk in blocking_risks)
         return self._report(
             agent_name="NewsSentimentAgent",
@@ -296,6 +310,8 @@ class MarketIntelligenceService:
             metrics={
                 "credentials_configured": has_news_credentials,
                 "fresh_news_count": fresh_news_count,
+                "risk_window_news_count": risk_window_news_count,
+                "risk_window_hours": self.settings.news_sentiment_risk_window_hours,
                 "latest_news_at": latest_at,
                 "sentiment_used_for_buy": False,
                 "india_news_gate": india_risk.model_dump(),

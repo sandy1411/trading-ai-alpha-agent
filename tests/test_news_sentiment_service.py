@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -68,6 +70,36 @@ def test_negative_provider_sentiment_score_blocks_market_entries() -> None:
     assert risk.blocks_new_entries is True
     assert risk.reason == "negative_news_sentiment_score:-0.420"
     assert risk.sentiment_score == -0.42
+
+
+def test_overnight_negative_news_inside_risk_window_blocks_next_session() -> None:
+    service = NewsSentimentService(
+        Settings(
+            _env_file=None,
+            news_ingestion_enabled=False,
+            news_staleness_minutes=60,
+            news_sentiment_risk_window_hours=36,
+        )
+    )
+    session_factory = _session_factory()
+
+    with session_factory() as session:
+        session.add(
+            NewsItem(
+                market=None,
+                symbol=None,
+                provider="TEST_NEWS",
+                headline="Stop buying gold warning hits jewellery sentiment",
+                published_at=utc_now() - timedelta(hours=18),
+                raw_payload={},
+            )
+        )
+        session.commit()
+
+        risk = service.assess(session, market=Market.INDIA, symbol="TITAN")
+
+    assert risk.blocks_new_entries is True
+    assert risk.reason == "negative_news_keyword_risk"
 
 
 def test_missing_fresh_news_is_caution_not_a_buy_signal() -> None:
