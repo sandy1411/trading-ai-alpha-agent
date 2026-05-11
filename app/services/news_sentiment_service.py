@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
+import re
 from typing import Any
 
 from sqlalchemy import func, select
@@ -271,9 +272,15 @@ class NewsSentimentService:
         matches: list[str] = []
         for item in items:
             headline = item.headline.lower()
-            market_hit = any(keyword in headline for keyword in self.market_negative_keywords)
-            gold_hit = any(keyword in headline for keyword in self.gold_risk_keywords)
-            symbol_hit = bool(symbol_upper and symbol_upper.lower() in headline)
+            market_hit = any(
+                self._contains_keyword(headline, keyword)
+                for keyword in self.market_negative_keywords
+            )
+            gold_hit = any(
+                self._contains_keyword(headline, keyword)
+                for keyword in self.gold_risk_keywords
+            )
+            symbol_hit = bool(symbol_upper and self._contains_keyword(headline, symbol_upper))
             applies_to_gold_symbol = gold_hit and symbol_upper in self.gold_sensitive_symbols
             applies_market_wide = market_hit and self._headline_applies(item, market, symbol)
             if applies_market_wide or symbol_hit or applies_to_gold_symbol:
@@ -297,6 +304,12 @@ class NewsSentimentService:
         if item.market is not None:
             return item.market == market
         return True
+
+    @staticmethod
+    def _contains_keyword(text: str, keyword: str) -> bool:
+        escaped = re.escape(keyword.lower()).replace(r"\ ", r"\s+")
+        pattern = rf"(?<![a-z0-9]){escaped}(?![a-z0-9])"
+        return re.search(pattern, text.lower()) is not None
 
     @staticmethod
     def _sentiment_score(item: NewsItem) -> float | None:

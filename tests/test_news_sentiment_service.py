@@ -102,6 +102,29 @@ def test_overnight_negative_news_inside_risk_window_blocks_next_session() -> Non
     assert risk.reason == "negative_news_keyword_risk"
 
 
+def test_keyword_guard_does_not_match_substrings_like_bank_for_ban() -> None:
+    service = NewsSentimentService(Settings(_env_file=None, news_ingestion_enabled=False))
+    session_factory = _session_factory()
+
+    with session_factory() as session:
+        session.add(
+            NewsItem(
+                market=Market.US,
+                symbol=None,
+                provider="TEST_NEWS",
+                headline="Bank earnings momentum improves after analyst upgrade",
+                published_at=utc_now(),
+                raw_payload={},
+            )
+        )
+        session.commit()
+
+        risk = service.assess(session, market=Market.US, symbol=None)
+
+    assert risk.blocks_new_entries is False
+    assert risk.reason == "no_blocking_news_sentiment_detected"
+
+
 def test_missing_fresh_news_is_caution_not_a_buy_signal() -> None:
     service = NewsSentimentService(Settings(_env_file=None, news_ingestion_enabled=False))
     session_factory = _session_factory()
