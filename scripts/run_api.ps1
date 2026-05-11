@@ -1,5 +1,5 @@
 param(
-  [int]$Port = 8000,
+  [int]$Port = 8002,
   [string]$Python = "C:\Users\Sandeep.Pathak\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 )
 

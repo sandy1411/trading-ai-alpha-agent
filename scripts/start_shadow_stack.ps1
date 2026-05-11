@@ -1,17 +1,71 @@
 param(
-    [int]$Port = 8001,
-    [int]$IntervalSeconds = 60
+    [int]$Port = 8002,
+    [int]$IntervalSeconds = 60,
+    [int]$DockerWaitSeconds = 180
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
+function Invoke-Checked {
+    param(
+        [string]$FilePath,
+        [string[]]$ArgumentList
+    )
+
+    & $FilePath @ArgumentList
+    if ($LASTEXITCODE -ne 0) {
+        throw "$FilePath failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Test-DockerReady {
+    docker info *> $null
+    return $LASTEXITCODE -eq 0
+}
+
+function Ensure-DockerReady {
+    if (Test-DockerReady) {
+        return
+    }
+
+    $dockerDesktop = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    if (Test-Path -LiteralPath $dockerDesktop) {
+        Write-Host "Starting Docker Desktop..."
+        Start-Process -FilePath $dockerDesktop -WindowStyle Hidden
+    }
+
+    $deadline = (Get-Date).AddSeconds($DockerWaitSeconds)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 3
+        if (Test-DockerReady) {
+            return
+        }
+    }
+    throw "Docker Desktop did not become ready within $DockerWaitSeconds seconds."
+}
+
+function Wait-PostgresReady {
+    $deadline = (Get-Date).AddSeconds(90)
+    while ((Get-Date) -lt $deadline) {
+        docker compose exec -T postgres pg_isready -U dalalwall -d dalalwall_ai_alpha *> $null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        Start-Sleep -Seconds 2
+    }
+    throw "PostgreSQL did not become healthy within 90 seconds."
+}
+
+Ensure-DockerReady
+
 Write-Host "Starting Docker services..."
-docker compose up -d postgres redis | Out-Host
+Invoke-Checked -FilePath "docker" -ArgumentList @("compose", "up", "-d", "postgres", "redis", "mailpit")
+Wait-PostgresReady
 
 Write-Host "Ensuring database schema exists..."
-.\.venv\Scripts\python.exe scripts\init_db.py create-all | Out-Host
+Invoke-Checked -FilePath ".\.venv\Scripts\python.exe" -ArgumentList @("scripts\init_db.py", "create-all")
 
 Write-Host "Stopping existing local API/shadow-loop processes..."
 function Stop-SandyProcesses {

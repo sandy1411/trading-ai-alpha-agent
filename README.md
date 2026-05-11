@@ -137,8 +137,10 @@ python scripts/shadow_readiness.py check
 ```
 
 Runtime logs are written to `.runtime/shadow_training.log`.
+The local dashboard stack standardizes on `http://127.0.0.1:8002/dashboard`.
 
-The Windows task installer creates weekday tasks for Zerodha auth assistance, stack start, and daily local summary draft generation. It does not bypass Zerodha login/2FA, and it does not send emails unless SMTP is configured and email sending is explicitly enabled.
+The Windows task installer creates weekday tasks for Zerodha auth assistance, stack start, and daily summary generation. It also starts Mailpit and the shadow dashboard stack at Windows logon so the dashboard comes back after a laptop restart. It does not bypass Zerodha login/2FA, and it does not send emails unless SMTP is configured and email sending is explicitly enabled.
+If Task Scheduler cannot be updated due Windows permissions, copy `scripts\Sandy-Trading-AI-AutoStart.cmd` into the current user's Startup folder. It starts Docker Desktop if needed, waits for PostgreSQL, then starts the dashboard on port `8002`.
 
 Shadow mode creates shadow transactions in the shadow ledger only. It does not place Zerodha broker orders.
 

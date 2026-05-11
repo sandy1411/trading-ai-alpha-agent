@@ -17,7 +17,8 @@ function Register-SandyTask {
         [string]$Script,
         [string]$Time,
         [string]$ScriptArguments = "",
-        [string[]]$DaysOfWeek = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+        [string[]]$DaysOfWeek = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"),
+        [switch]$AtLogOn
     )
 
     $scriptCommand = "-NoProfile -ExecutionPolicy Bypass -File `"$Root\$Script`""
@@ -28,7 +29,12 @@ function Register-SandyTask {
     $action = New-ScheduledTaskAction `
         -Execute "powershell.exe" `
         -Argument $scriptCommand
-    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $DaysOfWeek -At $Time
+    $triggers = @(
+        New-ScheduledTaskTrigger -Weekly -DaysOfWeek $DaysOfWeek -At $Time
+    )
+    if ($AtLogOn) {
+        $triggers += New-ScheduledTaskTrigger -AtLogOn
+    }
     $settings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries `
@@ -36,16 +42,16 @@ function Register-SandyTask {
     Register-ScheduledTask `
         -TaskName "$TaskPrefix $Name" `
         -Action $action `
-        -Trigger $trigger `
+        -Trigger $triggers `
         -Settings $settings `
         -Description "Sandy-Trading-AI $Name" `
         -Force | Out-Host
 }
 
-Register-SandyTask -Name "Start Mailpit" -Script "scripts\start_mailpit.ps1" -Time $MailpitTime
+Register-SandyTask -Name "Start Mailpit" -Script "scripts\start_mailpit.ps1" -Time $MailpitTime -AtLogOn
 Register-SandyTask -Name "Zerodha Auth Assist" -Script "scripts\daily_zerodha_auth_assist.ps1" -Time $AuthTime
-Register-SandyTask -Name "Start Shadow Stack" -Script "scripts\start_shadow_stack.ps1" -Time $StartTime
-Register-SandyTask -Name "Start US Shadow Stack" -Script "scripts\start_shadow_stack.ps1" -Time $USStartTime
+Register-SandyTask -Name "Start Shadow Stack" -Script "scripts\start_shadow_stack.ps1" -Time $StartTime -ScriptArguments "-Port 8002" -AtLogOn
+Register-SandyTask -Name "Start US Shadow Stack" -Script "scripts\start_shadow_stack.ps1" -Time $USStartTime -ScriptArguments "-Port 8002"
 Register-SandyTask -Name "Daily Summary Email" -Script "scripts\daily_summary.ps1" -Time $SummaryTime -ScriptArguments "-SendEmail"
 Register-SandyTask -Name "US Post-Market Summary Email" -Script "scripts\daily_summary.ps1" -Time $USSummaryTime -ScriptArguments "-SendEmail" -DaysOfWeek @("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
@@ -55,10 +61,10 @@ if (Get-ScheduledTask -TaskName $oldDraftTask -ErrorAction SilentlyContinue) {
 }
 
 Write-Host "Scheduled weekday tasks installed:"
-Write-Host "- $TaskPrefix Start Mailpit at $MailpitTime"
+Write-Host "- $TaskPrefix Start Mailpit at $MailpitTime and at Windows logon"
 Write-Host "- $TaskPrefix Zerodha Auth Assist at $AuthTime"
-Write-Host "- $TaskPrefix Start Shadow Stack at $StartTime"
-Write-Host "- $TaskPrefix Start US Shadow Stack at $USStartTime"
+Write-Host "- $TaskPrefix Start Shadow Stack at $StartTime and at Windows logon on http://127.0.0.1:8002/dashboard"
+Write-Host "- $TaskPrefix Start US Shadow Stack at $USStartTime on http://127.0.0.1:8002/dashboard"
 Write-Host "- $TaskPrefix Daily Summary Email at $SummaryTime"
 Write-Host "- $TaskPrefix US Post-Market Summary Email at $USSummaryTime on Tuesday-Saturday"
 Write-Host ""
