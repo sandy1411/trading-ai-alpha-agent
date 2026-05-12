@@ -912,3 +912,54 @@ def test_shadow_training_blocks_fresh_entry_on_negative_news_sentiment(monkeypat
     assert news_event is not None
     assert news_event.context["reason"] == "negative_news_keyword_risk"
     assert order_count == 0
+
+
+def test_stale_intraday_shadow_observations_close_before_new_session() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+    service = ShadowTrainingService(Settings(_env_file=None))
+    opened_at = datetime(2026, 5, 11, 5, 0, tzinfo=UTC)
+    now = datetime(2026, 5, 12, 5, 0, tzinfo=UTC)
+    assessment = _Assessment(stop_loss=95, take_profit=110).model_dump()
+
+    with session_factory() as session:
+        observation = ShadowObservation(
+            strategy_name=service.strategy_name,
+            market=Market.INDIA,
+            symbol="TCS",
+            opened_at=opened_at,
+            last_marked_at=opened_at,
+            entry_price=100,
+            current_price=99,
+            hypothetical_quantity=10,
+            hypothetical_notional_inr=1000,
+            hypothetical_pnl_inr=-10,
+            hypothetical_pnl_pct=-0.01,
+            metadata_json={
+                "assessment": assessment,
+                "entry_assessment": assessment,
+                "latest_assessment": assessment,
+            },
+        )
+        session.add(observation)
+        session.commit()
+
+        closed = service._close_stale_intraday_observations(session, Market.INDIA, now)
+        session.commit()
+
+        sample = session.scalar(select(ShadowTrainingSample).where(ShadowTrainingSample.symbol == "TCS"))
+        event = session.scalar(
+            select(RiskEvent).where(RiskEvent.event_type == "stale_intraday_shadow_closed")
+        )
+        status = observation.status
+        exit_action = observation.metadata_json["shadow_exit"]["action"]
+
+    assert closed == 1
+    assert status == "CLOSED_SHADOW_SESSION_CLOSE"
+    assert exit_action == "EXIT_SESSION_CLOSE"
+    assert sample is not None
+    assert sample.sample_kind == "SHADOW_EXIT"
+    assert sample.sample_at.replace(tzinfo=UTC) == opened_at
+    assert event is not None
+    assert event.context["closed"] == 1

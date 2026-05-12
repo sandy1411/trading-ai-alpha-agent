@@ -59,6 +59,10 @@ class ShadowTrainingService:
                 return result
             strategy = self._get_or_create_strategy(session)
             result["news_sentiment_ingestion"] = self.news_sentiment.ingest_if_due(session)
+            result["stale_intraday_closed"] = {
+                "india": self._close_stale_intraday_observations(session, Market.INDIA, started_at),
+                "us": self._close_stale_intraday_observations(session, Market.US, started_at),
+            }
             self._run_india_cycle(session, strategy, result)
             self._run_us_cycle(session, strategy, result)
             result["intraday_model_training"] = self._run_intraday_model_training(session)
@@ -467,7 +471,7 @@ class ShadowTrainingService:
                     "price_currency": "USD" if observation.market == Market.US else "INR",
                     "usd_inr": fx_rate,
                     "assessment": entry_assessment,
-                    "latest_assessment": assessment.model_dump(),
+                    "latest_assessment": self._assessment_dump(assessment),
                     "shadow_note": "Timestamped intraday training sample only. No order intent created.",
                 },
             )
@@ -600,7 +604,7 @@ class ShadowTrainingService:
         observation.status = status
         observation.metadata_json = {
             **metadata,
-            "latest_assessment": assessment.model_dump(),
+            "latest_assessment": self._assessment_dump(assessment),
             "shadow_exit": shadow_exit,
             "reentry_blocked_until": reentry_blocked_until.isoformat(),
         }
@@ -632,7 +636,7 @@ class ShadowTrainingService:
                     "price_currency": "USD" if observation.market == Market.US else "INR",
                     "usd_inr": fx_rate,
                     "assessment": metadata.get("entry_assessment") or metadata.get("assessment") or {},
-                    "latest_assessment": assessment.model_dump(),
+                    "latest_assessment": self._assessment_dump(assessment),
                     "shadow_exit": shadow_exit,
                     "shadow_note": "Closed shadow observation only. No order intent created.",
                 },
@@ -673,7 +677,70 @@ class ShadowTrainingService:
             "EXIT_TAKE_PROFIT": "CLOSED_SHADOW_TAKE_PROFIT",
             "EXIT_PROFIT_BOOKING": "CLOSED_SHADOW_PROFIT_BOOKED",
             "EXIT_PROFIT_GIVEBACK": "CLOSED_SHADOW_PROFIT_GIVEBACK",
+            "EXIT_SESSION_CLOSE": "CLOSED_SHADOW_SESSION_CLOSE",
         }.get(action, "CLOSED_SHADOW_EXIT")
+
+    def _close_stale_intraday_observations(
+        self,
+        session: Session,
+        market: Market,
+        now: datetime,
+    ) -> int:
+        day_start = self._market_day_start_utc(market, now)
+        stale_rows = session.scalars(
+            select(ShadowObservation).where(
+                ShadowObservation.strategy_name == self.strategy_name,
+                ShadowObservation.market == market,
+                ShadowObservation.status == "OPEN_OBSERVATION",
+                ShadowObservation.opened_at < day_start,
+            )
+        ).all()
+        closed = 0
+        for observation in stale_rows:
+            metadata = observation.metadata_json or {}
+            assessment = (
+                metadata.get("latest_assessment")
+                or metadata.get("entry_assessment")
+                or metadata.get("assessment")
+                or {}
+            )
+            marked_at = ensure_utc(observation.last_marked_at or observation.opened_at)
+            exit_time = min(marked_at, day_start - timedelta(microseconds=1))
+            fx_rate = self._metadata_float(metadata.get("usd_inr"), default=1.0)
+            self._close_shadow_observation(
+                session=session,
+                observation=observation,
+                signal_id=observation.signal_id or "",
+                assessment=assessment,
+                fx_rate=fx_rate,
+                now=exit_time,
+                exit_decision={
+                    "action": "EXIT_SESSION_CLOSE",
+                    "label": "Intraday session close",
+                    "urgency": "HIGH",
+                    "reason": (
+                        "Intraday shadow observations cannot carry overnight. "
+                        "Closed with the last known shadow mark."
+                    ),
+                    "reentry_plan": (
+                        "Start the next session only from a fresh signal; do not treat "
+                        "yesterday's intraday idea as an overnight holding."
+                    ),
+                    "shadow_only": True,
+                    "no_order_placement": True,
+                },
+            )
+            closed += 1
+        if closed:
+            self._record_risk_event(
+                session,
+                market,
+                "stale_intraday_shadow_closed",
+                f"{closed} stale intraday shadow observations closed before new session scanning.",
+                "WARN",
+                context={"closed": closed, "day_start": day_start.isoformat()},
+            )
+        return closed
 
     def _active_reentry_cooldown(
         self,
@@ -941,6 +1008,19 @@ class ShadowTrainingService:
                 "shadow_only": True,
                 "no_order_placement": True,
             }
+
+    @staticmethod
+    def _assessment_dump(assessment: Any) -> dict[str, Any]:
+        if hasattr(assessment, "model_dump"):
+            return assessment.model_dump()
+        return assessment if isinstance(assessment, dict) else {}
+
+    @staticmethod
+    def _metadata_float(value: object, *, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
     @staticmethod
     def _extract_last_price(quote: dict[str, Any]) -> float | None:
