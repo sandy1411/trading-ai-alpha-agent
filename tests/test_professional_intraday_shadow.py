@@ -383,11 +383,31 @@ def test_professional_india_once_consumes_zerodha_quotes_without_live_orders(mon
             return {
                 "data": {
                     f"NSE:{symbol}": {
+                        "instrument_token": 12345,
                         "last_price": 100.0,
                         "average_price": 99.8,
                         "volume": 100000,
                         "ohlc": {"open": 100.0, "high": 102.0, "low": 98.0, "close": 99.0},
                     }
+                }
+            }
+
+        def historical_candles(
+            self,
+            *,
+            instrument_token: int | str,
+            interval: str,
+            from_date: datetime,
+            to_date: datetime,
+        ) -> dict:
+            return {
+                "data": {
+                    "candles": [
+                        ["2026-05-13T09:15:00+0530", 99, 100, 98, 99.5, 1000],
+                        ["2026-05-13T09:16:00+0530", 99.5, 100.5, 99, 100, 1200],
+                        ["2026-05-13T09:17:00+0530", 100, 101, 99.5, 100.5, 1400],
+                        ["2026-05-13T09:18:00+0530", 100.5, 101.5, 100, 101, 1800],
+                    ]
                 }
             }
 

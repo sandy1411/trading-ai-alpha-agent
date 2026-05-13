@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -18,7 +19,7 @@ class ZerodhaDataProvider(BaseDataProvider):
 
     def __init__(self, settings: Settings | None = None, client: httpx.Client | None = None) -> None:
         self.settings = settings or get_settings()
-        self.client = client or httpx.Client(timeout=3)
+        self.client = client or httpx.Client(timeout=10)
 
     def validate_credentials(self) -> bool:
         if not (self.settings.zerodha_api_key and load_access_token()):
@@ -49,4 +50,26 @@ class ZerodhaDataProvider(BaseDataProvider):
         )
         if response.status_code != 200:
             raise FailClosedError("zerodha_quote_unavailable")
+        return dict(response.json())
+
+    def historical_candles(
+        self,
+        *,
+        instrument_token: int | str,
+        interval: str,
+        from_date: datetime,
+        to_date: datetime,
+    ) -> dict[str, Any]:
+        if interval not in {"minute", "3minute", "5minute"}:
+            raise FailClosedError("zerodha_historical_interval_not_allowed")
+        response = self.client.get(
+            f"{self.base_url}/instruments/historical/{instrument_token}/{interval}",
+            headers=self._headers(),
+            params={
+                "from": from_date.strftime("%Y-%m-%d %H:%M:%S"),
+                "to": to_date.strftime("%Y-%m-%d %H:%M:%S"),
+            },
+        )
+        if response.status_code != 200:
+            raise FailClosedError("zerodha_historical_candles_unavailable")
         return dict(response.json())

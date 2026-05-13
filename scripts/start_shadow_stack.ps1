@@ -73,11 +73,11 @@ Invoke-Checked -FilePath ".\.venv\Scripts\python.exe" -ArgumentList @("scripts\i
 
 Write-Host "Stopping existing local API/shadow-loop processes..."
 function Stop-SandyProcesses {
-    $pythonPathPattern = "*dalalwall-ai-alpha-agent*\.venv\Scripts\python.exe*"
     $targets = Get-CimInstance Win32_Process | Where-Object {
-        $_.CommandLine -like $pythonPathPattern -and (
+        $_.CommandLine -like "*dalalwall-ai-alpha-agent*" -and (
             $_.CommandLine -like "*uvicorn app.main:app*" -or
-            $_.CommandLine -like "*run_shadow_training.py*loop*"
+            $_.CommandLine -like "*run_shadow_training.py*loop*" -or
+            $_.CommandLine -like "*run_professional_intraday_shadow.py*loop*"
         )
     }
     foreach ($target in $targets) {
@@ -161,9 +161,19 @@ $loop = Start-Process `
     -WindowStyle Hidden `
     -PassThru
 
+Write-Host "Starting professional intraday shadow loop..."
+$professionalLoop = Start-Process `
+    -FilePath ".\.venv\Scripts\python.exe" `
+    -ArgumentList @("scripts\run_professional_intraday_shadow.py", "loop", "--interval-seconds", "180") `
+    -WorkingDirectory $Root `
+    -WindowStyle Hidden `
+    -PassThru
+
 Write-Host ""
 Write-Host "Sandy-Trading-AI shadow stack is running."
 Write-Host "API PID: $($api.Id)"
 Write-Host "Shadow loop PID: $($loop.Id)"
+Write-Host "Professional intraday shadow loop PID: $($professionalLoop.Id)"
 Write-Host "Dashboard: http://127.0.0.1:$Port/dashboard"
 Write-Host "Log: $Root\.runtime\shadow_training.log"
+Write-Host "Professional log: $Root\.runtime\professional_intraday_shadow.log"

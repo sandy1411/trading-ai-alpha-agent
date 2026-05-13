@@ -5,6 +5,7 @@ from statistics import mean
 from typing import Any
 
 from app.core.enums import Market
+from app.core.time_utils import ensure_utc
 from app.intraday.config import IntradayShadowConfig
 from app.intraday.models import Candle, DataQualityReport, MarketDataSnapshot
 
@@ -58,6 +59,29 @@ class MarketDataBuilder:
             source="ZERODHA_KITE_QUOTE",
             raw=quote,
         )
+
+    @staticmethod
+    def candles_from_zerodha_history(history: dict[str, Any]) -> list[Candle]:
+        data = history.get("data") if isinstance(history, dict) else {}
+        rows = data.get("candles") if isinstance(data, dict) else []
+        candles: list[Candle] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, list | tuple) or len(row) < 6:
+                continue
+            try:
+                candles.append(
+                    Candle(
+                        timestamp=ensure_utc(_parse_kite_datetime(row[0])),
+                        open=float(row[1]),
+                        high=float(row[2]),
+                        low=float(row[3]),
+                        close=float(row[4]),
+                        volume=float(row[5]),
+                    )
+                )
+            except (TypeError, ValueError):
+                continue
+        return candles
 
 
 class DataQualityMonitor:
@@ -155,3 +179,11 @@ def _positive_float(value: Any) -> float | None:
         return None
     return parsed if parsed > 0 else None
 
+
+def _parse_kite_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    raw = str(value)
+    if len(raw) >= 5 and (raw[-5] in {"+", "-"}) and raw[-3] != ":":
+        raw = f"{raw[:-2]}:{raw[-2:]}"
+    return datetime.fromisoformat(raw)

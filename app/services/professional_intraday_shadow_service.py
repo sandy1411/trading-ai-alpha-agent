@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
+
 from app.core.config import Settings, get_settings
 from app.core.enums import Market
-from app.core.errors import TradingAlphaError
+from app.core.errors import FailClosedError, TradingAlphaError
 from app.data_providers.zerodha_data import ZerodhaDataProvider
 from app.intraday.market_data import MarketDataBuilder
 from app.intraday.pipeline import IntradayShadowPipeline, empty_professional_shadow_status
@@ -43,7 +47,39 @@ class ProfessionalIntradayShadowService:
         for symbol in selected_symbols:
             try:
                 quote = provider.latest(symbol, Market.INDIA)
-                snapshot = MarketDataBuilder.from_zerodha_quote(symbol, quote)
+                instrument_token = _instrument_token_from_quote(quote)
+                from_date, to_date = _india_intraday_window(self.settings)
+                candles_1m = MarketDataBuilder.candles_from_zerodha_history(
+                    provider.historical_candles(
+                        instrument_token=instrument_token,
+                        interval="minute",
+                        from_date=from_date,
+                        to_date=to_date,
+                    )
+                )
+                candles_3m = MarketDataBuilder.candles_from_zerodha_history(
+                    provider.historical_candles(
+                        instrument_token=instrument_token,
+                        interval="3minute",
+                        from_date=from_date,
+                        to_date=to_date,
+                    )
+                )
+                candles_5m = MarketDataBuilder.candles_from_zerodha_history(
+                    provider.historical_candles(
+                        instrument_token=instrument_token,
+                        interval="5minute",
+                        from_date=from_date,
+                        to_date=to_date,
+                    )
+                )
+                snapshot = MarketDataBuilder.from_zerodha_quote(
+                    symbol,
+                    quote,
+                    candles_1m=candles_1m,
+                    candles_3m=candles_3m,
+                    candles_5m=candles_5m,
+                )
                 results.append(self.pipeline.process_snapshot(snapshot))
             except TradingAlphaError as exc:
                 blocked.append({"symbol": symbol, "reason": str(exc)})
@@ -62,6 +98,28 @@ class ProfessionalIntradayShadowService:
                 "if required real candles are missing."
             ),
         }
+
+
+def _india_intraday_window(settings: Settings) -> tuple[datetime, datetime]:
+    now = datetime.now(ZoneInfo(settings.india_timezone))
+    session_start = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    if now < session_start:
+        session_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return session_start, now
+
+
+def _instrument_token_from_quote(quote: dict[str, Any]) -> int:
+    data = quote.get("data") if isinstance(quote, dict) else {}
+    payload = next(iter(data.values())) if isinstance(data, dict) and data else {}
+    if not isinstance(payload, dict):
+        raise FailClosedError("zerodha_quote_payload_missing")
+    token = payload.get("instrument_token")
+    if token in (None, ""):
+        raise FailClosedError("zerodha_instrument_token_missing")
+    try:
+        return int(token)
+    except (TypeError, ValueError) as exc:
+        raise FailClosedError("zerodha_instrument_token_invalid") from exc
 
 
 def _clean_symbols(symbols: list[str]) -> list[str]:

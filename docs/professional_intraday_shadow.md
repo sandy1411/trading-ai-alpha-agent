@@ -23,6 +23,18 @@ Start the normal shadow stack:
 .\scripts\start_shadow_stack.ps1 -Port 8002
 ```
 
+The stack starts:
+
+- FastAPI dashboard
+- legacy shadow research loop
+- professional intraday shadow loop
+
+The professional loop runs every 180 seconds during the India market session and writes:
+
+```text
+.runtime/professional_intraday_shadow.log
+```
+
 View API status:
 
 ```powershell
@@ -44,7 +56,7 @@ Invoke-RestMethod -Method Post `
   -Body '{"symbols":["RELIANCE","TCS"]}'
 ```
 
-This endpoint reads Zerodha quote data and feeds the professional shadow pipeline. It never calls a broker order adapter, and it will reject trades when required candle quality is incomplete.
+This endpoint reads Zerodha quote data plus real Zerodha 1-minute, 3-minute, and 5-minute candles, then feeds the professional shadow pipeline. It never calls a broker order adapter, and it will reject trades when required data quality or risk checks fail.
 
 Dashboard data includes the same block at:
 

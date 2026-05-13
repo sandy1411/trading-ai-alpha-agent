@@ -104,6 +104,12 @@ Useful endpoints:
 - `GET /alerts/daily-summary`
 - `POST /alerts/daily-summary/email`
 
+For the full local shadow stack, including the professional intraday shadow loop:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_shadow_stack.ps1 -Port 8002
+```
+
 ## Emergency Kill Switch
 
 ```powershell
