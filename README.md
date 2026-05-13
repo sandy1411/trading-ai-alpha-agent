@@ -8,8 +8,9 @@ It does not guarantee profit, returns, signal quality, or loss avoidance. Tradin
 
 The platform starts fail-closed:
 
-- `TRADING_MODE=SHADOW_LIVE_REAL_DATA`
+- `TRADING_MODE=SHADOW_LIVE`
 - `LIVE_TRADING_ENABLED=false`
+- `LIVE_ORDERS_ENABLED=false`
 - `KILL_SWITCH=true`
 
 LLM components may later generate analysis, signals, summaries, and hypotheses, but they must never place orders. Execution follows this path only:
@@ -91,6 +92,8 @@ Useful endpoints:
 - `GET /dashboard/data`
 - `GET /shadow/status`
 - `GET /shadow/readiness`
+- `GET /shadow/professional/status`
+- `POST /shadow/professional/run-india-once`
 - `POST /shadow/run-cycle`
 - `GET /system/status`
 - `POST /system/kill-switch/on`

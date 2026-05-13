@@ -29,6 +29,23 @@ View API status:
 Invoke-RestMethod http://127.0.0.1:8002/shadow/professional/status
 ```
 
+Run one Zerodha live-quote shadow pass for the configured India watchlist:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8002/shadow/professional/run-india-once
+```
+
+Run it for a smaller symbol list:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8002/shadow/professional/run-india-once `
+  -ContentType "application/json" `
+  -Body '{"symbols":["RELIANCE","TCS"]}'
+```
+
+This endpoint reads Zerodha quote data and feeds the professional shadow pipeline. It never calls a broker order adapter, and it will reject trades when required candle quality is incomplete.
+
 Dashboard data includes the same block at:
 
 ```powershell
@@ -59,4 +76,3 @@ Live readiness remains blocked until at least:
 - manual approval flag
 
 This implementation evaluates readiness only. It does not enable live trading.
-

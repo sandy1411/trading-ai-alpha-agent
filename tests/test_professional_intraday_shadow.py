@@ -29,6 +29,8 @@ from app.intraday.scoring import SignalScoringEngine
 from app.intraday.shadow_execution import ShadowExecutionSimulator
 from app.intraday.strategies import OpeningRangeBreakoutStrategy, VWAPTrendLongStrategy, VWAPTrendShortStrategy
 from app.intraday.universe import UniverseFilter
+from app.services import professional_intraday_shadow_service as professional_service_module
+from app.services.professional_intraday_shadow_service import ProfessionalIntradayShadowService
 
 
 def _candles(*, bearish: bool = False) -> tuple[Candle, ...]:
@@ -370,3 +372,36 @@ def test_pipeline_is_shadow_only_and_never_places_broker_orders(tmp_path) -> Non
     assert result["shadow_only"] is True
     assert pipeline.can_place_live_orders is False
     assert report["live_readiness"]["live_readiness_status"] == "BLOCKED"
+
+
+def test_professional_india_once_consumes_zerodha_quotes_without_live_orders(monkeypatch, tmp_path) -> None:
+    class ZerodhaProviderStub:
+        def __init__(self, settings: Settings) -> None:
+            self.settings = settings
+
+        def latest(self, symbol: str, market: Market) -> dict:
+            return {
+                "data": {
+                    f"NSE:{symbol}": {
+                        "last_price": 100.0,
+                        "average_price": 99.8,
+                        "volume": 100000,
+                        "ohlc": {"open": 100.0, "high": 102.0, "low": 98.0, "close": 99.0},
+                    }
+                }
+            }
+
+    monkeypatch.setattr(professional_service_module, "ZerodhaDataProvider", ZerodhaProviderStub)
+    service = ProfessionalIntradayShadowService(
+        Settings(_env_file=None, shadow_india_symbols="reliance,RELIANCE,tcs")
+    )
+    service.pipeline.journal.root = tmp_path
+
+    result = service.run_india_once()
+
+    assert result["shadow_only"] is True
+    assert result["orders_placed"] == 0
+    assert result["symbols_requested"] == ["RELIANCE", "TCS"]
+    assert result["symbols_processed"] == 2
+    assert result["blocked"] == []
+    assert all(row["orders_placed"] == 0 for row in result["results"])

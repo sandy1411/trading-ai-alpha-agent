@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 
 from app.api.auth import require_control_auth
 from app.services.market_intelligence_service import market_intelligence_service
@@ -9,6 +10,10 @@ from app.services.shadow_readiness_service import shadow_readiness_service
 from app.services.shadow_training_service import shadow_training_service
 
 router = APIRouter(prefix="/shadow", tags=["shadow"])
+
+
+class ProfessionalRunRequest(BaseModel):
+    symbols: list[str] | None = Field(default=None, max_length=50)
 
 
 @router.get("/status")
@@ -38,6 +43,13 @@ def shadow_agents_status() -> dict:
 @router.get("/professional/status")
 def professional_shadow_status() -> dict:
     return professional_intraday_shadow_service.status()
+
+
+@router.post("/professional/run-india-once", dependencies=[Depends(require_control_auth)])
+def run_professional_india_once(request: ProfessionalRunRequest | None = None) -> dict:
+    return professional_intraday_shadow_service.run_india_once(
+        symbols=request.symbols if request else None,
+    )
 
 
 @router.post("/run-cycle", dependencies=[Depends(require_control_auth)])

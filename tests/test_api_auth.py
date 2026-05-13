@@ -77,6 +77,28 @@ def test_control_auth_allows_sensitive_endpoint_with_header_token(monkeypatch) -
     assert response.json()["orders_placed"] == 0
 
 
+def test_professional_shadow_run_endpoint_is_shadow_only(monkeypatch) -> None:
+    monkeypatch.setattr(
+        shadow.professional_intraday_shadow_service,
+        "run_india_once",
+        lambda symbols=None: {
+            "symbols_requested": symbols,
+            "shadow_only": True,
+            "orders_placed": 0,
+        },
+    )
+    client = TestClient(app)
+
+    response = client.post("/shadow/professional/run-india-once", json={"symbols": ["RELIANCE"]})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "symbols_requested": ["RELIANCE"],
+        "shadow_only": True,
+        "orders_placed": 0,
+    }
+
+
 def test_control_auth_allows_sensitive_endpoint_with_bearer_token(monkeypatch) -> None:
     monkeypatch.setattr(
         auth,
