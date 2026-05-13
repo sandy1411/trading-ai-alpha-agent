@@ -6,6 +6,12 @@ This is a research-only intraday pipeline. It uses live or replayed market snaps
 
 `MarketDataSnapshot -> DataQualityMonitor -> UniverseFilter -> MarketRegimeClassifier -> Strategy -> SignalScoringEngine -> RiskManager -> ShadowExecutionSimulator -> VirtualPositionManager -> CostModel -> TradeJournal -> DailyReviewEngine -> LiveReadinessEvaluator`
 
+Agentic review is layered around the deterministic core:
+
+`AgenticOrchestrator -> RegimeReviewAgent -> SignalCriticAgent -> RiskAuditorAgent -> ExecutionSimulationAgent`
+
+Agents can block or warn, but cannot force trades, increase size, or place orders.
+
 ## Default Safety
 
 - `TRADING_MODE=SHADOW_LIVE`

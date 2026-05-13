@@ -1,0 +1,14 @@
+enabled: true
+strict_mode: true
+agent_can_block_trade: true
+agent_can_reduce_confidence: true
+agent_can_recommend_risk_reduction: true
+agent_can_force_trade: false
+agent_can_increase_risk: false
+agent_can_change_strategy_live: false
+agent_can_enable_live_trading: false
+agent_can_modify_journal: false
+agent_can_delete_logs: false
+agent_timeout_ms: 1500
+max_retries: 0
+fallback_policy: FAIL_SAFE_BLOCK

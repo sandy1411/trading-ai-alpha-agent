@@ -29,7 +29,7 @@ def main(
     access_token = load_access_token()
     typer.echo(f"Access token stored locally: {mask_secret(access_token)}")
     typer.echo(f"user_id={result.get('user_id', '')}")
-    typer.echo("Keep TRADING_MODE=SHADOW_LIVE_REAL_DATA, LIVE_TRADING_ENABLED=false, KILL_SWITCH=true.")
+    typer.echo("Keep TRADING_MODE=SHADOW_LIVE, LIVE_TRADING_ENABLED=false, LIVE_ORDERS_ENABLED=false, KILL_SWITCH=true.")
 
 
 if __name__ == "__main__":

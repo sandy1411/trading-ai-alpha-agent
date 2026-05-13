@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 
 from app.core.config import Settings, get_settings
-from app.core.enums import AuthStatus, Market, ProviderStatus, TradingMode
+from app.core.enums import AuthStatus, Market, ProviderStatus
 from app.db.session import SessionLocal
 from app.risk.market_calendar import MarketCalendar
 from app.services.broker_service import broker_service
@@ -28,7 +28,7 @@ class ShadowReadinessService:
         checks.append(
             self._check(
                 "mode_is_shadow_live",
-                self.settings.trading_mode == TradingMode.SHADOW_LIVE_REAL_DATA,
+                self.settings.trading_mode.is_shadow_like,
                 self.settings.trading_mode.value,
             )
         )

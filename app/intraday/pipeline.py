@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Iterable
 
+from app.agentic.orchestrator import AgenticOrchestrator
 from app.intraday.config import IntradayShadowConfig
 from app.intraday.daily_report import DailyReviewEngine
 from app.intraday.journal import TradeJournal
 from app.intraday.kill_switch import KillSwitchManager
 from app.intraday.market_data import DataQualityMonitor
-from app.intraday.models import FillStatus, JournalEntry, MarketDataSnapshot, SignalDecision
+from app.intraday.models import FillStatus, JournalEntry, MarketDataSnapshot, ScoredSignal, SignalDecision
 from app.intraday.positions import VirtualPositionManager
 from app.intraday.readiness import LiveReadinessEvaluator
 from app.intraday.regime import MarketRegimeClassifier
@@ -35,6 +36,7 @@ class IntradayShadowPipeline:
         config: IntradayShadowConfig | None = None,
         strategies: Iterable[IntradayStrategy] | None = None,
         journal: TradeJournal | None = None,
+        agentic: AgenticOrchestrator | None = None,
     ) -> None:
         self.config = config or IntradayShadowConfig.from_settings()
         self.quality = DataQualityMonitor(self.config)
@@ -48,6 +50,7 @@ class IntradayShadowPipeline:
         self.daily_review = DailyReviewEngine()
         self.readiness = LiveReadinessEvaluator(self.config)
         self.journal = journal or TradeJournal()
+        self.agentic = agentic or AgenticOrchestrator()
         self.strategies = list(
             strategies
             or [VWAPTrendLongStrategy(), VWAPTrendShortStrategy(), OpeningRangeBreakoutStrategy()]
@@ -75,6 +78,7 @@ class IntradayShadowPipeline:
             "signals": [],
             "orders": [],
             "positions": [],
+            "agentic": {"enabled": self.agentic.config.enabled, "warnings": [], "decisions": []},
             "orders_placed": 0,
             "shadow_only": True,
         }
@@ -89,12 +93,40 @@ class IntradayShadowPipeline:
                 )
             )
             return result
+        regime_review = self.agentic.review_regime(snapshot, regime)
+        _merge_agentic_result(result, regime_review)
+        if regime_review.block:
+            self._journal(
+                JournalEntry(
+                    timestamp=snapshot.timestamp,
+                    event_type="AGENTIC_REGIME_BLOCK",
+                    symbol=snapshot.symbol,
+                    rejection_reason=";".join(regime_review.warnings),
+                    market_snapshot={"regime": regime.regime.value, **quality.metrics},
+                )
+            )
+            return result
 
         for strategy in self.strategies:
             signal = strategy.generate(snapshot, regime)
             if signal is None:
                 continue
             scored = self.scoring.score(signal)
+            agent_signal_review = self.agentic.review_signal(scored, state=state)
+            _merge_agentic_result(result, agent_signal_review)
+            if agent_signal_review.confidence_multiplier < 1.0:
+                adjusted_score = int(scored.score * agent_signal_review.confidence_multiplier)
+                scored = ScoredSignal(
+                    signal=scored.signal,
+                    score=adjusted_score,
+                    decision=SignalDecision.VALID
+                    if adjusted_score >= self.config.min_signal_score
+                    else SignalDecision.WATCH_ONLY
+                    if adjusted_score >= self.config.watch_score
+                    else SignalDecision.REJECTED,
+                    reasons=[*scored.reasons, "agentic_confidence_reduction"],
+                    component_scores=scored.component_scores,
+                )
             result["signals"].append(
                 {
                     "signal_id": signal.signal_id,
@@ -103,8 +135,30 @@ class IntradayShadowPipeline:
                     "score": scored.score,
                     "decision": scored.decision.value,
                     "reasons": scored.reasons,
+                    "agentic_warnings": agent_signal_review.warnings,
                 }
             )
+            if agent_signal_review.block:
+                self._journal(
+                    JournalEntry(
+                        timestamp=signal.timestamp,
+                        event_type="SIGNAL_REJECTED",
+                        symbol=signal.symbol,
+                        direction=signal.direction.value,
+                        strategy=signal.strategy_name,
+                        regime=signal.regime_at_signal.value,
+                        signal_score=scored.score,
+                        reason_codes=scored.reasons,
+                        rejection_reason="agentic_block:" + ";".join(agent_signal_review.warnings),
+                        entry_price=signal.entry_price,
+                        stop_loss=signal.stop_loss,
+                        target=signal.target_price,
+                        risk_reward=signal.risk_reward_ratio,
+                        market_snapshot=signal.market_snapshot,
+                        candle_snapshot=signal.candle_snapshot,
+                    )
+                )
+                continue
             if scored.decision != SignalDecision.VALID:
                 self._journal(
                     JournalEntry(
@@ -149,6 +203,35 @@ class IntradayShadowPipeline:
                     )
                 )
                 continue
+            risk_review = self.agentic.review_risk(
+                scored,
+                approval,
+                state=state,
+                intraday_config=self.config,
+            )
+            _merge_agentic_result(result, risk_review)
+            if risk_review.block:
+                self._journal(
+                    JournalEntry(
+                        timestamp=signal.timestamp,
+                        event_type="SIGNAL_REJECTED",
+                        symbol=signal.symbol,
+                        direction=signal.direction.value,
+                        strategy=signal.strategy_name,
+                        regime=signal.regime_at_signal.value,
+                        signal_score=scored.score,
+                        reason_codes=scored.reasons,
+                        rejection_reason="agentic_risk_block:" + ";".join(risk_review.warnings),
+                        entry_price=signal.entry_price,
+                        stop_loss=signal.stop_loss,
+                        target=signal.target_price,
+                        risk_amount=approval.risk_amount,
+                        risk_reward=signal.risk_reward_ratio,
+                        market_snapshot=signal.market_snapshot,
+                        candle_snapshot=signal.candle_snapshot,
+                    )
+                )
+                continue
             self._journal(
                 JournalEntry(
                     timestamp=signal.timestamp,
@@ -170,6 +253,8 @@ class IntradayShadowPipeline:
                 )
             )
             order = self.execution.simulate(signal, approval, snapshot)
+            execution_review = self.agentic.review_execution(scored=scored, order=order, snapshot=snapshot)
+            _merge_agentic_result(result, execution_review)
             result["orders"].append(
                 {
                     "shadow_order_id": order.shadow_order_id,
@@ -235,7 +320,29 @@ def empty_professional_shadow_status() -> dict[str, object]:
         "mode": "PROFESSIONAL_INTRADAY_SHADOW",
         "shadow_only": True,
         "orders_placed": 0,
+        "agentic_review_enabled": AgenticOrchestrator().config.enabled,
         "live_readiness": readiness,
         "generated_at": datetime.now(UTC).isoformat(),
     }
 
+
+def _merge_agentic_result(result: dict[str, object], review) -> None:
+    agentic = result.setdefault("agentic", {"enabled": True, "warnings": [], "decisions": []})
+    if not isinstance(agentic, dict):
+        return
+    agentic.setdefault("warnings", [])
+    agentic.setdefault("decisions", [])
+    agentic["warnings"].extend(review.warnings)
+    agentic["decisions"].extend(
+        [
+            {
+                "agent": record.agent_name,
+                "status": record.schema_validation_status,
+                "severity": record.severity,
+                "recommendation": record.recommendation,
+                "final_action": record.final_action_taken,
+                "related_signal_id": record.related_signal_id,
+            }
+            for record in review.records
+        ]
+    )

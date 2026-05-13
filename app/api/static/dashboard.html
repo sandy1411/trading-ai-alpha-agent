@@ -1583,7 +1583,7 @@
     }
 
     function plainGuideRows(data) {
-      const mode = data.system?.trading_mode || "SHADOW_LIVE_REAL_DATA";
+      const mode = data.system?.trading_mode || "SHADOW_LIVE";
       return [
         eventCard("Buy / entry", "The row started a hypothetical position at the entry price. No real Zerodha/Alpaca buy order was sent.", `mode=${mode}`, "accent"),
         eventCard("Sell / exit", "The row is closed or should be closed in shadow learning when profit target, profit booking, giveback, or stop-loss logic fires.", "shadow exit only", "good"),

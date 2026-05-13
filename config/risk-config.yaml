@@ -1,0 +1,10 @@
+capital: 500000
+risk_per_trade_percent: 0.25
+max_daily_loss_percent: 1.0
+max_weekly_loss_percent: 3.0
+max_open_positions: 2
+max_trades_per_day: 3
+max_consecutive_losses: 3
+min_risk_reward_ratio: 1.5
+allow_averaging_down: false
+allow_martingale: false

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.agentic.journal import AgentDecisionJournal
 from app.core.config import Settings, get_settings
 from app.core.enums import Market
 from app.core.errors import FailClosedError, TradingAlphaError
@@ -32,6 +33,7 @@ class ProfessionalIntradayShadowService:
             "mode": "PROFESSIONAL_INTRADAY_SHADOW",
             "shadow_only": True,
             "orders_placed": 0,
+            "agentic_review": self._agentic_status(),
             "status": "READY_FOR_SHADOW_SIGNALS",
             "daily_report": report,
             "live_readiness": report["live_readiness"],
@@ -93,10 +95,20 @@ class ProfessionalIntradayShadowService:
             "symbols_processed": len(results),
             "blocked": blocked,
             "results": results,
+            "agentic_review": self._agentic_status(),
             "note": (
                 "This consumes live Zerodha quote data and may still reject all trades "
                 "if required real candles are missing."
             ),
+        }
+
+    def _agentic_status(self) -> dict[str, object]:
+        decisions = AgentDecisionJournal().read_day()
+        return {
+            "enabled": self.pipeline.agentic.config.enabled,
+            "strict_mode": self.pipeline.agentic.config.strict_mode,
+            "decisions_today": len(decisions),
+            "last_decision": decisions[-1] if decisions else None,
         }
 
 

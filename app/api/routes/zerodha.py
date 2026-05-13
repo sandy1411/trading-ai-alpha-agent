@@ -56,5 +56,5 @@ def zerodha_callback(
             "If exchange_status is success, the access token is stored locally. "
             "If it failed, run: .\\.venv\\Scripts\\python.exe scripts\\zerodha_exchange_token.py --write-env"
         ),
-        "safety": "Keep TRADING_MODE=SHADOW_LIVE_REAL_DATA, LIVE_TRADING_ENABLED=false, KILL_SWITCH=true.",
+        "safety": "Keep TRADING_MODE=SHADOW_LIVE, LIVE_TRADING_ENABLED=false, LIVE_ORDERS_ENABLED=false, KILL_SWITCH=true.",
     }

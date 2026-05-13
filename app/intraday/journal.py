@@ -14,6 +14,7 @@ class TradeJournal:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def append(self, entry: JournalEntry) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
         path = self._path(entry.timestamp.date())
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry.model_dump(), sort_keys=True) + "\n")
@@ -36,4 +37,3 @@ class TradeJournal:
 
     def _path(self, day: date) -> Path:
         return self.root / f"journal-{day.isoformat()}.jsonl"
-

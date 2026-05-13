@@ -1,0 +1,24 @@
+enabled_strategies:
+  - VWAP_TREND_LONG
+  - VWAP_TREND_SHORT
+  - OPENING_RANGE_BREAKOUT_BREAKDOWN
+score_thresholds:
+  valid: 70
+  watch_only: 60
+time_windows:
+  avoid_first_minutes: 5
+  no_new_trade_after: "15:00"
+allowed_regimes:
+  long:
+    - STRONG_BULLISH
+    - WEAK_BULLISH
+  short:
+    - STRONG_BEARISH
+    - WEAK_BEARISH
+vwap_settings:
+  max_pullback_distance_pct: 0.8
+opening_range_settings:
+  ranges_minutes:
+    - 15
+    - 30
+  volume_confirmation_required: true

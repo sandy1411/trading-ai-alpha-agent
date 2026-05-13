@@ -1,0 +1,8 @@
+default_slippage_bps: 5.0
+volatility_slippage_multiplier: 1.5
+spread_impact_enabled: true
+latency_simulation_enabled: true
+latency_ms: 250
+missed_fill_enabled: true
+max_entry_move_pct: 0.25
+partial_fill_simulation_enabled: false

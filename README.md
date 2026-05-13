@@ -47,6 +47,7 @@ For Windows-specific setup, see `docs/windows_setup.md`.
 For database setup choices, see `docs/database_setup.md`.
 For email setup, see `docs/email_setup.md`.
 For the professional intraday shadow core, see `docs/professional_intraday_shadow.md`.
+For agentic review rules and journals, see `docs/agentic_review.md`.
 
 ## Docker Setup
 
@@ -93,6 +94,8 @@ Useful endpoints:
 - `GET /shadow/status`
 - `GET /shadow/readiness`
 - `GET /shadow/professional/status`
+- `GET /shadow/agentic/status`
+- `GET /shadow/agentic/decisions`
 - `POST /shadow/professional/run-india-once`
 - `POST /shadow/run-cycle`
 - `GET /system/status`

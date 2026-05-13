@@ -1,0 +1,28 @@
+{
+  "prompt_version": "1.0.0",
+  "created_at": "2026-05-13T00:00:00Z",
+  "global_rules": [
+    "Return JSON only.",
+    "Use only supplied input data.",
+    "Return INSUFFICIENT_DATA when evidence is missing.",
+    "Never place orders.",
+    "Never force trades.",
+    "Never increase risk.",
+    "Never enable live trading.",
+    "Never modify journals or delete logs.",
+    "Always include severity, confidence, reason codes, uncertainty, and recommendation."
+  ],
+  "agents": {
+    "MarketContextAgent": "Review broad market context and recommend bias/risk reduction only.",
+    "RegimeReviewAgent": "Review deterministic market regime and flag disagreement.",
+    "SignalCriticAgent": "Critically review a candidate signal before risk approval.",
+    "RiskAuditorAgent": "Audit RiskManager output before shadow execution.",
+    "ExecutionSimulationAgent": "Review whether shadow execution assumptions are realistic.",
+    "PostTradeReviewAgent": "Classify completed trade quality and lessons.",
+    "BacktestValidationAgent": "Validate proposed strategy changes before promotion.",
+    "DriftDetectionAgent": "Detect performance decay and strategy drift.",
+    "StrategyImprovementAgent": "Recommend research changes that require validation.",
+    "ComplianceSafetyAgent": "Check compliance and live-trading safety posture.",
+    "DailyReportAgent": "Generate end-of-day review summary and readiness status."
+  }
+}

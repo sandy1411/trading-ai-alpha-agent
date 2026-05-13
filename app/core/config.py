@@ -18,6 +18,17 @@ class Settings(BaseSettings):
     live_trading_enabled: bool = False
     live_orders_enabled: bool = False
     kill_switch: bool = True
+    agentic_review_enabled: bool = True
+    agentic_strict_mode: bool = True
+    agent_can_block_trade: bool = True
+    agent_can_reduce_confidence: bool = True
+    agent_can_recommend_risk_reduction: bool = True
+    agent_can_force_trade: bool = False
+    agent_can_increase_risk: bool = False
+    agent_can_change_strategy_live: bool = False
+    agent_timeout_ms: int = Field(default=1500, ge=100, le=30000)
+    agent_max_retries: int = Field(default=0, ge=0, le=3)
+    agent_fallback_policy: str = "FAIL_SAFE_BLOCK"
     api_control_auth_enabled: bool = False
     api_control_token: str = ""
 
@@ -209,6 +220,12 @@ class Settings(BaseSettings):
             errors.append("live_orders_enabled_false")
         if self.kill_switch:
             errors.append("kill_switch_enabled")
+        if self.agent_can_force_trade:
+            errors.append("agent_can_force_trade_true")
+        if self.agent_can_increase_risk:
+            errors.append("agent_can_increase_risk_true")
+        if self.agent_can_change_strategy_live:
+            errors.append("agent_can_change_strategy_live_true")
         if not self.real_provider_required:
             errors.append("real_provider_required_false")
         if not self.broker_reconciliation_required:

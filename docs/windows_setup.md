@@ -64,8 +64,9 @@ Copy-Item .env.example .env
 Keep these values until shadow-live validation is complete:
 
 ```env
-TRADING_MODE=SHADOW_LIVE_REAL_DATA
+TRADING_MODE=SHADOW_LIVE
 LIVE_TRADING_ENABLED=false
+LIVE_ORDERS_ENABLED=false
 KILL_SWITCH=true
 ```
 

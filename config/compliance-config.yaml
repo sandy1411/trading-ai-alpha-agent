@@ -1,0 +1,10 @@
+live_orders_enabled: false
+require_manual_live_unlock: true
+static_ip_required: true
+max_order_rate_per_second: 10
+audit_required: true
+strategy_id_required: true
+order_intent_id_required: true
+rejected_order_audit_required: true
+zerodha_market_protection_handling_required: true
+zerodha_static_ip_readiness_required: true

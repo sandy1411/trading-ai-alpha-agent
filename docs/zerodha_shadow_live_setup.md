@@ -7,8 +7,9 @@ Use this flow to connect Zerodha Kite Connect without enabling live autonomous t
 Keep:
 
 ```env
-TRADING_MODE=SHADOW_LIVE_REAL_DATA
+TRADING_MODE=SHADOW_LIVE
 LIVE_TRADING_ENABLED=false
+LIVE_ORDERS_ENABLED=false
 KILL_SWITCH=true
 ```
 
