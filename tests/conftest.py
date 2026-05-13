@@ -35,7 +35,7 @@ from app.schemas.signal import TradeCandidate
 
 @pytest.fixture()
 def settings() -> Settings:
-    return Settings(_env_file=None)
+    return Settings(_env_file=None, live_orders_enabled=True)
 
 
 @pytest.fixture()

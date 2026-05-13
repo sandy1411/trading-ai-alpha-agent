@@ -1,0 +1,8 @@
+{
+  "market": "INDIA",
+  "timezone": "Asia/Kolkata",
+  "avoid_first_minutes": 5,
+  "no_new_trade_after": "15:00",
+  "force_close_time": "15:20",
+  "force_close_intraday_positions": true
+}

@@ -21,8 +21,12 @@ function Invoke-Checked {
 }
 
 function Test-DockerReady {
-    docker info *> $null
-    return $LASTEXITCODE -eq 0
+    try {
+        docker info *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
 }
 
 function Ensure-DockerReady {

@@ -1,0 +1,12 @@
+{
+  "enabled_strategies": [
+    "VWAP_TREND_LONG",
+    "VWAP_TREND_SHORT",
+    "OPENING_RANGE_BREAKOUT_BREAKDOWN"
+  ],
+  "minimum_signal_score": 70,
+  "watch_only_score": 60,
+  "sideways_regime_trading_enabled": false,
+  "high_volatility_trading_enabled": false,
+  "options_trading_enabled": false
+}

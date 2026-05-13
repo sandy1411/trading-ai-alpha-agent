@@ -23,6 +23,7 @@ from app.services.broker_service import broker_service
 from app.services.intraday_model_training_service import intraday_model_training_service
 from app.services.market_intelligence_service import market_intelligence_service
 from app.services.profit_protection_service import profit_protection_service
+from app.services.professional_intraday_shadow_service import professional_intraday_shadow_service
 from app.services.provider_service import provider_service
 from app.services.shadow_exit_service import shadow_exit_service
 from app.services.shadow_readiness_service import shadow_readiness_service
@@ -281,6 +282,7 @@ class PerformanceService:
                 "day_wise_pnl": day_wise_pnl,
                 "profit_protection": profit_protection,
                 "market_intelligence": market_intelligence,
+                "professional_intraday_shadow": professional_intraday_shadow_service.status(),
                 "training": training,
                 "model_training": intraday_model_report,
                 "strategy_lab": strategy_lab,

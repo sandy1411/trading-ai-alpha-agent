@@ -4,6 +4,11 @@ from enum import StrEnum
 
 
 class TradingMode(StrEnum):
+    BACKTEST = "BACKTEST"
+    MARKET_REPLAY = "MARKET_REPLAY"
+    SHADOW_LIVE = "SHADOW_LIVE"
+    PAPER_TRADING = "PAPER_TRADING"
+    LIVE_DISABLED = "LIVE_DISABLED"
     BACKTEST_REAL_HISTORICAL_DATA = "BACKTEST_REAL_HISTORICAL_DATA"
     SHADOW_LIVE_REAL_DATA = "SHADOW_LIVE_REAL_DATA"
     MICRO_LIVE_AUTONOMOUS = "MICRO_LIVE_AUTONOMOUS"
@@ -12,6 +17,18 @@ class TradingMode(StrEnum):
     @property
     def is_live_capable(self) -> bool:
         return self in {self.MICRO_LIVE_AUTONOMOUS, self.LIVE_AUTONOMOUS}
+
+    @property
+    def is_shadow_like(self) -> bool:
+        return self in {
+            self.SHADOW_LIVE,
+            self.SHADOW_LIVE_REAL_DATA,
+            self.PAPER_TRADING,
+            self.BACKTEST,
+            self.BACKTEST_REAL_HISTORICAL_DATA,
+            self.MARKET_REPLAY,
+            self.LIVE_DISABLED,
+        }
 
 
 class Market(StrEnum):

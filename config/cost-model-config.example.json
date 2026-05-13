@@ -1,0 +1,9 @@
+{
+  "market": "INDIA_EQUITY_INTRADAY_APPROXIMATION",
+  "brokerage": "min(20, 0.03% per side)",
+  "stt_sell_side": 0.00025,
+  "exchange_charges_turnover": 0.0000325,
+  "gst_on_brokerage_exchange_sebi": 0.18,
+  "stamp_duty_buy_side": 0.00003,
+  "sebi_charges_turnover": 0.000001
+}

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.auth import require_control_auth
 from app.services.market_intelligence_service import market_intelligence_service
+from app.services.professional_intraday_shadow_service import professional_intraday_shadow_service
 from app.services.shadow_readiness_service import shadow_readiness_service
 from app.services.shadow_training_service import shadow_training_service
 
@@ -32,6 +33,11 @@ def shadow_readiness() -> dict:
 @router.get("/agents/status")
 def shadow_agents_status() -> dict:
     return market_intelligence_service.summary()
+
+
+@router.get("/professional/status")
+def professional_shadow_status() -> dict:
+    return professional_intraday_shadow_service.status()
 
 
 @router.post("/run-cycle", dependencies=[Depends(require_control_auth)])

@@ -1,0 +1,8 @@
+{
+  "INTRADAY_SHADOW_SLIPPAGE_BPS": 5,
+  "INTRADAY_SHADOW_LATENCY_MS": 250,
+  "INTRADAY_SHADOW_MAX_ENTRY_MOVE_PCT": 0.0025,
+  "simulate_spread_impact": true,
+  "simulate_missed_fills": true,
+  "broker_orders_allowed": false
+}

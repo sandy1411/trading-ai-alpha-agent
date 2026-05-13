@@ -1,0 +1,9 @@
+{
+  "default_universe": "NIFTY_50",
+  "allow_nifty_100_extension": true,
+  "reject_low_volume": true,
+  "reject_wide_spread": true,
+  "reject_abnormal_gap": true,
+  "reject_poor_data_quality": true,
+  "options_enabled": false
+}

@@ -1,0 +1,10 @@
+{
+  "trigger_on_daily_loss": true,
+  "trigger_on_weekly_loss": true,
+  "trigger_on_max_consecutive_losses": true,
+  "trigger_on_stale_data": true,
+  "trigger_on_feed_disconnect": true,
+  "trigger_on_too_many_rejected_signals": true,
+  "trigger_on_api_latency_ms_above": 2000,
+  "manual_reset_required": true
+}

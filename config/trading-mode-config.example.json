@@ -1,0 +1,8 @@
+{
+  "TRADING_MODE": "SHADOW_LIVE",
+  "LIVE_TRADING_ENABLED": false,
+  "LIVE_ORDERS_ENABLED": false,
+  "KILL_SWITCH": true,
+  "allowed_modes": ["BACKTEST", "MARKET_REPLAY", "SHADOW_LIVE", "PAPER_TRADING", "LIVE_DISABLED"],
+  "live_note": "Live broker order submission remains blocked unless separate explicit live flags and gates are later enabled."
+}

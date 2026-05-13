@@ -8,7 +8,7 @@ from app.core.enums import TradingMode
 
 @dataclass(slots=True)
 class SystemStateSnapshot:
-    trading_mode: TradingMode = TradingMode.SHADOW_LIVE_REAL_DATA
+    trading_mode: TradingMode = TradingMode.SHADOW_LIVE
     live_trading_enabled: bool = False
     kill_switch: bool = True
     compliance_status: str = "NOT_APPROVED"

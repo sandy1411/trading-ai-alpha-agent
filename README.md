@@ -45,6 +45,7 @@ Do not commit `.env`.
 For Windows-specific setup, see `docs/windows_setup.md`.
 For database setup choices, see `docs/database_setup.md`.
 For email setup, see `docs/email_setup.md`.
+For the professional intraday shadow core, see `docs/professional_intraday_shadow.md`.
 
 ## Docker Setup
 

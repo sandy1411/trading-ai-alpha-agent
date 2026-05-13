@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     app_name: str = "Sandy-Trading-AI"
     env: str = "local"
 
-    trading_mode: TradingMode = TradingMode.SHADOW_LIVE_REAL_DATA
+    trading_mode: TradingMode = TradingMode.SHADOW_LIVE
     live_trading_enabled: bool = False
+    live_orders_enabled: bool = False
     kill_switch: bool = True
     api_control_auth_enabled: bool = False
     api_control_token: str = ""
@@ -150,6 +151,30 @@ class Settings(BaseSettings):
     intraday_previous_session_loss_pause_lookback_days: int = Field(default=3, ge=1)
     intraday_previous_session_loss_pause_inr: float = Field(default=750, ge=0)
     intraday_previous_session_loss_pause_pct: float = Field(default=0.0075, ge=0, le=1)
+    intraday_shadow_capital_inr: float = Field(default=500_000, gt=0)
+    intraday_shadow_risk_per_trade_pct: float = Field(default=0.0025, gt=0, le=0.05)
+    intraday_shadow_max_daily_loss_pct: float = Field(default=0.01, gt=0, le=0.2)
+    intraday_shadow_max_weekly_loss_pct: float = Field(default=0.03, gt=0, le=0.5)
+    intraday_shadow_max_open_positions: int = Field(default=2, ge=1)
+    intraday_shadow_max_trades_per_day: int = Field(default=3, ge=1)
+    intraday_shadow_max_consecutive_losses: int = Field(default=3, ge=1)
+    intraday_shadow_min_reward_risk: float = Field(default=1.5, gt=0)
+    intraday_shadow_allow_shorts: bool = False
+    intraday_shadow_allow_sideways_trades: bool = False
+    intraday_shadow_allow_high_volatility_trades: bool = False
+    intraday_shadow_min_signal_score: int = Field(default=70, ge=0, le=100)
+    intraday_shadow_watch_score: int = Field(default=60, ge=0, le=100)
+    intraday_shadow_max_spread_pct: float = Field(default=0.003, ge=0, le=0.20)
+    intraday_shadow_max_data_age_seconds: int = Field(default=90, ge=1)
+    intraday_shadow_max_entry_move_pct: float = Field(default=0.0025, ge=0, le=0.05)
+    intraday_shadow_slippage_bps: float = Field(default=5.0, ge=0)
+    intraday_shadow_latency_ms: int = Field(default=250, ge=0)
+    intraday_shadow_no_new_trade_after: str = "15:00"
+    intraday_shadow_force_close_time: str = "15:20"
+    intraday_shadow_live_readiness_min_sessions: int = Field(default=30, ge=1)
+    intraday_shadow_live_readiness_min_trades: int = Field(default=100, ge=1)
+    intraday_shadow_live_readiness_profit_factor: float = Field(default=1.3, gt=0)
+    intraday_shadow_live_readiness_max_drawdown_pct: float = Field(default=0.08, ge=0, le=1)
     shadow_india_symbols: str = (
         "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,LT,AXISBANK,"
         "KOTAKBANK,BAJFINANCE,BHARTIARTL,ITC,HINDUNILVR,SUNPHARMA,"
@@ -180,6 +205,8 @@ class Settings(BaseSettings):
             errors.append("trading_mode_is_not_live_capable")
         if not self.live_trading_enabled:
             errors.append("live_trading_enabled_false")
+        if not self.live_orders_enabled:
+            errors.append("live_orders_enabled_false")
         if self.kill_switch:
             errors.append("kill_switch_enabled")
         if not self.real_provider_required:

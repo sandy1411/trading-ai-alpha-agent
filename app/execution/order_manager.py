@@ -88,6 +88,8 @@ class ExecutionAgent:
             raise RiskRejectedError("trading_mode_not_live_capable")
         if not state.live_trading_enabled:
             raise RiskRejectedError("live_trading_enabled_false")
+        if not self.settings.live_orders_enabled:
+            raise RiskRejectedError("live_orders_enabled_false")
         if state.kill_switch:
             raise RiskRejectedError("kill_switch_enabled")
         if broker_health.market != intent.market:

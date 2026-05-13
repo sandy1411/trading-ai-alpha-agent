@@ -27,7 +27,7 @@ class SystemState(Base, TimestampMixin):
     key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     trading_mode: Mapped[TradingMode] = mapped_column(
         SAEnum(TradingMode, name="system_trading_mode"),
-        default=TradingMode.SHADOW_LIVE_REAL_DATA,
+        default=TradingMode.SHADOW_LIVE,
     )
     live_trading_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     kill_switch: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -7,8 +7,9 @@ from app.core.enums import TradingMode
 def test_default_config_is_shadow_live_disabled_kill_on() -> None:
     settings = Settings(_env_file=None)
 
-    assert settings.trading_mode == TradingMode.SHADOW_LIVE_REAL_DATA
+    assert settings.trading_mode == TradingMode.SHADOW_LIVE
     assert settings.live_trading_enabled is False
+    assert settings.live_orders_enabled is False
     assert settings.kill_switch is True
     assert settings.intraday_min_total_samples == 100_000
     assert settings.intraday_min_samples_per_market == 25_000
@@ -21,6 +22,8 @@ def test_default_config_is_shadow_live_disabled_kill_on() -> None:
     assert settings.intraday_profit_booking_min_pnl_pct == 0.003
     assert settings.intraday_shadow_exit_enabled is True
     assert settings.intraday_reentry_cooldown_minutes == 20
+    assert settings.intraday_shadow_risk_per_trade_pct == 0.0025
+    assert settings.intraday_shadow_max_open_positions == 2
 
 
 def test_live_autonomous_requires_explicit_safety_flags() -> None:
@@ -29,4 +32,5 @@ def test_live_autonomous_requires_explicit_safety_flags() -> None:
     errors = settings.live_mode_safety_errors()
 
     assert "live_trading_enabled_false" in errors
+    assert "live_orders_enabled_false" in errors
     assert "kill_switch_enabled" in errors

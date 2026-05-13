@@ -1,0 +1,9 @@
+{
+  "daily_report_enabled": true,
+  "include_cost_adjusted_pnl": true,
+  "include_strategy_wise_pnl": true,
+  "include_regime_wise_pnl": true,
+  "include_symbol_wise_pnl": true,
+  "include_live_readiness": true,
+  "email_summary_enabled_by_env": "ENABLE_EMAIL_SUMMARY"
+}
